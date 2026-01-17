@@ -10,7 +10,7 @@ bringup_path = get_package_share_directory('wust_arm_bringup')
 sys.path.append(os.path.join(bringup_path, 'launch'))
 
 def generate_launch_description():
-    from common import node_params, launch_params,robot_state_publisher
+    from common import node_params, launch_params
     # 1. 组织相机组件
     hik_camera_node = ComposableNode(
         package='hik_camera',
@@ -70,5 +70,4 @@ def generate_launch_description():
     return LaunchDescription([container,
                              rviz_node,
                              static_tf_node,
-                            #  robot_state_publisher
                              ])

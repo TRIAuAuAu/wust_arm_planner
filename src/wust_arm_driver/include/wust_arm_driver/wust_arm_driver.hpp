@@ -63,15 +63,23 @@ private:
   std::vector<double> fake_joint_positions_;
   rclcpp::TimerBase::SharedPtr joint_state_timer_;
   void publishFakeJointStates();
+  // 模拟动力学相关(仅在 use_fake_hardware_ 为 true 时使用)
+  std::vector<double> sim_target_positions_; // 模拟的目标位置
+  double sim_max_speed_;                     // 模拟的最大速度 (rad/s)
+  rclcpp::Time last_sim_update_time_;               // 上次模拟更新时间
 
   // 判断是否成功到达目标点
   double goal_tolerance_;      // 允许误差 (rad)
   double goal_timeout_;        // 允许超时 (s)
+
   // 检查是否到达目标点
   bool check_goal_reached(const std::vector<double> & target_positions);
 
   int controller_freq_;   // 发送频率 (Hz)
   bool debug_;            // 调试模式
+
+  double state_publish_rate_; // joint_state发布频率 (Hz)
+  std::vector<std::string> joint_names_param_; // 关节名称列表
 };
 }  // namespace wust_arm_driver
 

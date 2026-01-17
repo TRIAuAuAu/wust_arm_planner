@@ -688,20 +688,26 @@
   </joint>
 
   <!-- 相机坐标系 -->
-  <link name="camera_optical_frame"/>
-    <joint name="camera_optical_joint" type="fixed">
-      <parent link="camera_link"/>
-      <child name="camera_optical_frame"/>
-      <origin xyz="0 0 0" rpy="0 0 0"/> <!-- 根据相机实际位置调整 -->
-    </joint>
-
   <link name="camera_link">
       <visual>
         <geometry>
-          <box size="0.02 0.05 0.02"/> </geometry>
+          <box size="0.02 0.05 0.02"/>
+        </geometry>
         <material name="blue">
           <color rgba="0 0 1 1"/>
         </material>
       </visual>
     </link>
+
+    <joint name="camera_joint" type="fixed">
+      <parent link="link7"/>
+      <child link="camera_link"/>
+      <origin xyz="0.05 0 0.02" rpy="0 0 0"/> </joint>
+
+    <link name="camera_optical_frame"/>
+    <joint name="camera_optical_joint" type="fixed">
+      <parent link="camera_link"/>
+      <child link="camera_optical_frame"/> <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/> 
+    </joint>
+
 </robot>

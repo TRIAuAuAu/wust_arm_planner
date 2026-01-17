@@ -71,7 +71,7 @@ def generate_launch_description():
     move_group_node = Node(
         package="moveit_ros_move_group",
         executable="move_group",
-        output="screen",
+        output="both",
         parameters=[moveit_config.to_dict(), 
                     move_group_capabilities],
         arguments=["--ros-args", "--log-level", "info"],
@@ -85,7 +85,7 @@ def generate_launch_description():
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
-        output="screen",
+        output="both",
         arguments=["-d", rviz_config],
         parameters=[
             moveit_config.robot_description,

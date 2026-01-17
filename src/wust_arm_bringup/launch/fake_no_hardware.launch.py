@@ -1,4 +1,5 @@
 import os
+import sys
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
@@ -8,9 +9,11 @@ from launch_ros.substitutions import FindPackageShare
 
 from moveit_configs_utils import MoveItConfigsBuilder
 from launch.actions import TimerAction, Shutdown
+bringup_path = get_package_share_directory('wust_arm_bringup')
+sys.path.append(os.path.join(bringup_path, 'launch'))
 
 def generate_launch_description():
-
+    from common import launch_params,node_params,detector_container
     # ========== MoveIt Config ==========
     moveit_config = (
         MoveItConfigsBuilder("wust_arm_7axis")
@@ -27,7 +30,7 @@ def generate_launch_description():
     robot_state_publisher = Node(
         package="robot_state_publisher",
         executable="robot_state_publisher",
-        output="screen",
+        output="both",
         parameters=[moveit_config.robot_description],
     )
 
@@ -39,7 +42,7 @@ def generate_launch_description():
     move_group_node = Node(
         package="moveit_ros_move_group",
         executable="move_group",
-        output="screen",
+        output="both",
         parameters=[moveit_config.to_dict(), 
                     move_group_capabilities],
         arguments=["--ros-args", "--log-level", "info"],
@@ -53,7 +56,7 @@ def generate_launch_description():
     rviz_node = Node(
         package="rviz2",
         executable="rviz2",
-        output="screen",
+        output="both",
         arguments=["-d", rviz_config],
         parameters=[
             moveit_config.robot_description,
@@ -64,18 +67,12 @@ def generate_launch_description():
     )
 
     # ========== WUST Arm Driver ==========
-    driver_config = os.path.join(
-        get_package_share_directory("wust_arm_driver"),
-        "config",
-        "serial_driver.yaml",
-    )
-
     wust_arm_driver_node = Node(
         package="wust_arm_driver",
         executable="wust_arm_driver_node",
         name="wust_arm_driver",
-        output="screen",
-        parameters=[driver_config],
+        output="both",
+        parameters=[node_params],
     )
 
     # ========== Static TF ==========
@@ -90,7 +87,7 @@ def generate_launch_description():
     mtc_place_node = Node(
         package="mtc_place",
         executable="mtc_place_node",
-        output="screen",
+        output="both",
         parameters=[
             moveit_config.robot_description,
             moveit_config.robot_description_semantic,
@@ -101,11 +98,8 @@ def generate_launch_description():
                 "planning_plugin": "ompl_interface/OMPLPlanner"
             }
         ],
-        # arguments=[
-        #     "--ros-args",
-        #     "--log-level",
-        #     "debug",
-        # ],
+        ros_arguments=['--ros-args', '--log-level',
+                       f'mtc_place_node:={launch_params["mtc_node_log_level"]}'],
     )
     # 延迟启动 MTC 节点，确保驱动和 MoveGroup 已就绪
     delay_mtc_node = TimerAction(
@@ -116,8 +110,9 @@ def generate_launch_description():
     return LaunchDescription([
         static_tf,
         robot_state_publisher,
-        wust_arm_driver_node,
         move_group_node,
+        wust_arm_driver_node,
+        # detector_container,
         rviz_node,
         # delay_mtc_node,
     ])

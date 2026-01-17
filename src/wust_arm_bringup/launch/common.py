@@ -5,6 +5,9 @@ from moveit_configs_utils import MoveItConfigsBuilder
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.actions import ComposableNodeContainer
+from launch_ros.descriptions import ComposableNode
+from launch.actions import TimerAction, Shutdown
 
 launch_params = yaml.safe_load(open(os.path.join(
     get_package_share_directory('wust_arm_bringup'), 'config', 'launch_params.yaml')))
@@ -73,4 +76,38 @@ rviz_node = Node(
         moveit_config.robot_description_kinematics,
         moveit_config.joint_limits,
     ],
+)
+
+# hik_camera
+hik_camera_node = ComposableNode(
+    package='hik_camera',
+    plugin='hik_camera::HikCameraNode',
+    name='hik_camera',
+    parameters=[node_params],
+    extra_arguments=[{'use_intra_process_comms': True}], # 开启进程内通信
+)
+
+# detector_node
+detector_node = ComposableNode(
+    package='detector',
+    plugin='exchange_slot::ExchangeSlotDetectorNode',
+    name='exchange_slot_detector',
+    parameters=[node_params],
+    extra_arguments=[{'use_intra_process_comms': True}], # 开启进程内通信
+)
+
+# detector_container
+detector_container = ComposableNodeContainer(
+    name='exchange_slot_container',
+    namespace='',
+    package='rclcpp_components',
+    executable='component_container',
+    composable_node_descriptions=[
+        hik_camera_node,
+        detector_node
+    ],
+    output='both',
+    ros_arguments=['--ros-args', '--log-level',
+                    f'exchange_slot_detector:={launch_params["detector_log_level"]}'],
+    on_exit=Shutdown(),
 )

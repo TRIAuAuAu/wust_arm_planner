@@ -9,19 +9,21 @@ WustArmDriver::WustArmDriver(const rclcpp::NodeOptions & options)
   serial_driver_{new drivers::serial_driver::SerialDriver(*owned_ctx_)}
 {
   RCLCPP_INFO(get_logger(), "Starting WustArmDriver!");
-
-  // 1. 初始化参数和串口配置
   getParams();
+  
   joint_names_ = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
-  fake_joint_positions_.resize(7, 0.0);
-  // 2. 尝试打开串口
-  if (use_fake_hardware_) {
-    RCLCPP_WARN(get_logger(), "Using FAKE hardware mode (no serial port)");
+  fake_joint_positions_.assign(7, 0.0);
+  sim_target_positions_.assign(7, 0.0);
+  last_sim_update_time_ = this->now(); // 初始化时间戳
 
-    joint_state_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(20),
-      std::bind(&WustArmDriver::publishFakeJointStates, this));
-  } else {
+    if (use_fake_hardware_) {
+      RCLCPP_WARN(get_logger(), "!!! RUNNING IN FAKE MODE !!!");
+      // 根据参数计算频率
+      int interval_ms = static_cast<int>(1000.0 / state_publish_rate_);
+      joint_state_timer_ = this->create_wall_timer(
+        std::chrono::milliseconds(interval_ms),
+        std::bind(&WustArmDriver::publishFakeJointStates, this));
+    } else{
     try {
       serial_driver_->init_port(device_name_, *device_config_);
       serial_driver_->port()->open();
@@ -58,11 +60,33 @@ WustArmDriver::~WustArmDriver()
   }
 }
 
-
 void WustArmDriver::publishFakeJointStates()
 {
+  auto now = this->now();
+  double dt = (now - last_sim_update_time_).seconds();
+  last_sim_update_time_ = now;
+
+  // 安全检查：防止 dt 异常（比如初次运行或系统时间跳变）
+  if (dt <= 0.0 || dt > 0.5) {
+    dt = 0.02; // 强制设为一个合理的步长 (50Hz)
+  }
+
+  // 1. 线性平滑插值 (一阶低通滤波模拟)
+  // 这里的 0.1 可以改为从参数读取的 sim_smooth_factor
+  // 这种方式不会因为 error 过大产生震荡，运动更丝滑
+  for (size_t i = 0; i < 7; ++i) {
+    double diff = sim_target_positions_[i] - fake_joint_positions_[i];
+    if (std::abs(diff) < 0.0001) {
+      fake_joint_positions_[i] = sim_target_positions_[i];
+    } else {
+      // 这里的 10.0 是增益系数，值越大，仿真追随速度越快
+      fake_joint_positions_[i] += diff * (10.0 * dt); 
+    }
+  }
+
+  // 2. 发布 JointState
   sensor_msgs::msg::JointState msg;
-  msg.header.stamp = this->now();
+  msg.header.stamp = now;
   msg.name = joint_names_;
   msg.position = fake_joint_positions_;
   joint_state_pub_->publish(msg);
@@ -70,27 +94,38 @@ void WustArmDriver::publishFakeJointStates()
 
 void WustArmDriver::getParams()
 {
-  using FlowControl = drivers::serial_driver::FlowControl;
-  using Parity = drivers::serial_driver::Parity;
-  using StopBits = drivers::serial_driver::StopBits;
+  // 声明参数
+  this->declare_parameter<bool>("use_fake_hardware", true);
+  this->declare_parameter<std::string>("device_name", "/dev/ttyUSB0");
+  this->declare_parameter<int>("baud_rate", 115200);
+  this->declare_parameter<double>("sim_max_speed", 1.5);
+  this->declare_parameter<double>("state_publish_rate", 50.0);
+  this->declare_parameter<double>("goal_tolerance", 0.01);
+  this->declare_parameter<double>("goal_timeout", 8.0);
+  this->declare_parameter<int>("controller_freq", 50);
+  this->declare_parameter<bool>("debug", true);
 
-  uint32_t baud_rate{};
-  auto fc = FlowControl::NONE;
-  auto pt = Parity::NONE;
-  auto sb = StopBits::ONE;
+  // 获取参数值并赋值给成员变量
+  use_fake_hardware_    = this->get_parameter("use_fake_hardware").as_bool();
+  device_name_          = this->get_parameter("device_name").as_string();
+  int baud_rate         = this->get_parameter("baud_rate").as_int();
+  sim_max_speed_        = this->get_parameter("sim_max_speed").as_double();
+  state_publish_rate_   = this->get_parameter("state_publish_rate").as_double();
+  goal_tolerance_       = this->get_parameter("goal_tolerance").as_double();
+  goal_timeout_         = this->get_parameter("goal_timeout").as_double();
+  controller_freq_      = this->get_parameter("controller_freq").as_int();
+  debug_                =     this->get_parameter("debug").as_bool();
 
-  device_name_ = declare_parameter<std::string>("device_name", "/dev/ttyUSB0");
-  baud_rate = declare_parameter<int>("baud_rate", 115200);
-  
-  // 这里省略第五个参数数据位，自动采用默认值 (8位)
+  // 打印确认，防止再次出现 0
+  RCLCPP_INFO(this->get_logger(), "Mode: %s, Freq: %d, Tolerance: %.3f", 
+              use_fake_hardware_ ? "FAKE" : "REAL", controller_freq_, goal_tolerance_);
+
+  // 串口配置
+  auto fc = drivers::serial_driver::FlowControl::NONE;
+  auto pt = drivers::serial_driver::Parity::NONE;
+  auto sb = drivers::serial_driver::StopBits::ONE;
   device_config_ = std::make_unique<drivers::serial_driver::SerialPortConfig>(
     baud_rate, fc, pt, sb);
-
-  use_fake_hardware_ = declare_parameter<bool>("use_fake_hardware", true);
-  goal_tolerance_ = declare_parameter<double>("goal_tolerance", 0.01);
-  goal_timeout_ = declare_parameter<double>("goal_timeout", 5.0);
-  controller_freq_ = declare_parameter<int>("controller_freq", 50); // 默认 50Hz
-  debug_ = declare_parameter<bool>("debug", false);
 }
 
 // Action Server 回调实现
@@ -118,15 +153,8 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
   auto result = std::make_shared<FollowJointTrajectory::Result>();
   auto feedback = std::make_shared<FollowJointTrajectory::Feedback>();
 
-  // 计算发送间隔
   int sleep_ms = 1000 / controller_freq_;
-  
-  if (debug_) {
-    RCLCPP_INFO(get_logger(), "Executing trajectory with %zu points at %d Hz", 
-                goal->trajectory.points.size(), controller_freq_);
-  }
 
-  // 发送轨迹点
   for (size_t i = 0; i < goal->trajectory.points.size(); ++i) {
     if (goal_handle->is_canceling()) {
       goal_handle->canceled(result);
@@ -135,10 +163,11 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
 
     const auto & point = goal->trajectory.points[i];
     
-    // 更新位置（仿真或发送串口）
     if (use_fake_hardware_) {
-      fake_joint_positions_ = point.positions;
+      // 仿真模式：只更新“下位机目标”，不改 fake_joint_positions_
+      sim_target_positions_ = point.positions;
     } else {
+      // 真实模式：发送串口包
       SendPacket packet;
       for (size_t j = 0; j < 7; ++j) {
         packet.target_joint_positions[j] = static_cast<float>(point.positions[j]);
@@ -147,12 +176,7 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
       serial_driver_->port()->send(toVector(packet));
     }
 
-    // 只有在 debug 模式下才频繁打印反馈，节省正式运行时的 CPU 消耗
-    if (debug_ && i % 10 == 0) {
-      RCLCPP_INFO(get_logger(), "Sending point %zu/%zu", i, goal->trajectory.points.size());
-    }
-
-    // 发布中间反馈给 MoveIt
+    // 反馈当前真实的物理位置（来自传感器或仿真插值）
     feedback->actual.positions = fake_joint_positions_;
     feedback->header.stamp = this->now();
     goal_handle->publish_feedback(feedback);
@@ -160,35 +184,31 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
     std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
   }
 
-  // 闭环到达判断
+  // 判断是否到达目标点
+  RCLCPP_INFO(get_logger(), "Trajectory sent, waiting for joints to settle...");
   auto start_time = this->now();
   const auto & final_target = goal->trajectory.points.back().positions;
-  bool reached = false;
 
   while (rclcpp::ok()) {
     if (goal_handle->is_canceling()) { goal_handle->canceled(result); return; }
 
-    // 超时检查
     if ((this->now() - start_time).seconds() > goal_timeout_) {
-      RCLCPP_ERROR(get_logger(), "Trajectory Timeout! Failed to reach tolerance.");
+      RCLCPP_ERROR(get_logger(), "Goal Failed: Joints did not reach tolerance in time.");
       result->error_code = FollowJointTrajectory::Result::GOAL_TOLERANCE_VIOLATED;
       goal_handle->abort(result);
       return;
     }
 
+    // 这里 check_goal_reached 会检查物理反馈 fake_joint_positions_
     if (check_goal_reached(final_target)) {
-      reached = true;
-      break;
+      break; 
     }
-    // 检查频率不必太高
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
-  if (reached) {
-    result->error_code = FollowJointTrajectory::Result::SUCCESSFUL;
-    goal_handle->succeed(result);
-    if (debug_) RCLCPP_INFO(get_logger(), "Goal Succeeded!");
-  }
+  result->error_code = FollowJointTrajectory::Result::SUCCESSFUL;
+  goal_handle->succeed(result);
+  RCLCPP_INFO(get_logger(), "Goal Reached Succeeded!");
 }
 
 // 辅助函数：判断所有关节是否进入容差范围
