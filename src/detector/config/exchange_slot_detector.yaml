@@ -1,0 +1,19 @@
+exchange_slot_detector:
+  ros__parameters:
+    binary_thresh: 110
+    # 物理尺寸（米）：这是 PnP 解算的关键。
+    # 如果你的兑换槽四个 L 角点中心围成的正方形边长是 25cm，则保持 0.25
+    square_size: 0.25
+    debug: true
+    no_hardware: true
+    # 本地视频或图片路径
+    local_path: "/home/auauau/wust_arm_7axis_ws/raw_video/blue_frame.mp4"
+    
+    # --- 8mm 相机真实内参 ---
+    # 矩阵顺序：[fx, 0, cx, 0, fy, cy, 0, 0, 1]
+    camera_matrix: [2381.82379, 0.0, 735.99867, 
+                    0.0, 2376.0304, 543.03644, 
+                    0.0, 0.0, 1.0]
+                    
+    # 畸变参数顺序：[k1, k2, p1, p2, k3]
+    dist_coeffs: [-0.039492, 0.057022, 0.002005, -0.000537, 0.000000]

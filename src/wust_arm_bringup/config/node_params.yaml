@@ -1,0 +1,56 @@
+/exchange_slot_detector:
+  ros__parameters:
+    binary_thresh: 110
+    # 物理尺寸（米）：这是 PnP 解算的关键。
+    # 如果你的兑换槽四个 L 角点中心围成的正方形边长是 25cm，则保持 0.25
+    square_size: 0.25
+    debug: true
+    no_hardware: true
+    # 本地视频或图片路径
+    local_path: "/home/auauau/wust_arm_7axis_ws/raw_video/blue_frame.mp4"
+    
+    # --- 8mm ---
+    # 矩阵顺序：[fx, 0, cx, 0, fy, cy, 0, 0, 1]
+    camera_matrix: [2381.82379, 0.0, 735.99867, 
+                    0.0, 2376.0304, 543.03644, 
+                    0.0, 0.0, 1.0]
+                    
+    # 畸变参数顺序：[k1, k2, p1, p2, k3]
+    dist_coeffs: [-0.039492, 0.057022, 0.002005, -0.000537, 0.000000]
+
+/hik_camera:
+  ros__parameters:
+    # 模式选择: "camera" (海康相机), "video" (读取本地mp4/avi), "image" (读取单张图片)
+    input_type: "video"
+    # 本地文件路径 (仅当 input_type 为 video 或 image 时生效)
+    # 支持绝对路径或在启动脚本中处理
+    file_path: "/home/auauau/wust_arm_7axis_ws/raw_video/blue.mp4"
+    camera_info_url: "package://wust_arm_bringup/config/camera_info.yaml"
+    # --- 相机基础设置 ---
+    camera_name: "narrow_stereo"
+    use_sensor_data_qos: true # 是否使用 SensorData (可靠性较低但实时性高) 的通信质量
+
+    # --- 海康相机硬件参数 (仅 camera 模式生效) ---
+    # 曝光时间 (单位: 微秒 us). 增加曝光会变亮，但运动物体会产生拖影(模糊)
+    exposure_time: 6000.0
+    # 增益 Gain (单位: dB). 增加增益会强制放大信号使图像变亮，但会增加噪点(雪花点)
+    gain: 32.0
+    # 帧率上限 (海康 SDK 内部控制)
+    fps: 60.0
+
+/wust_arm_driver:
+  ros__parameters:
+    debug: true
+    use_fake_hardware: true
+    goal_tolerance: 0.01
+    goal_timeout: 5.0
+    controller_freq: 50
+    device_name: /dev/ttyUSB0
+    baud_rate: 115200
+    flow_control: none
+    parity: none
+    stop_bits: "1"
+    
+    # 自定义驱动参数
+    update_rate: 50 # 发布 joint_states 的频率 (Hz)
+    joint_names: ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"]

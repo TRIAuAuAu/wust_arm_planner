@@ -1,0 +1,707 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="wust_arm_7axis_description">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="-0.120502496064328 8.95117313604032E-16 -0.075001501781442"
+        rpy="0 0 0" />
+      <mass
+        value="27.2994345133224" />
+      <inertia
+        ixx="0.619934521331604"
+        ixy="6.70760592831149E-21"
+        ixz="4.94033532068559E-06"
+        iyy="0.352604710153588"
+        iyz="8.96105449966593E-21"
+        izz="0.870170178643224" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/base_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.298039215686275 0.298039215686275 0.298039215686275 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link
+    name="link1">
+    <inertial>
+      <origin
+        xyz="0.00125620853336017 0.033093637817106 0.0641514370569444"
+        rpy="0 0 0" />
+      <mass
+        value="0.723158945021565" />
+      <inertia
+        ixx="0.000720268286282968"
+        ixy="6.45885358459913E-08"
+        ixz="-1.50797269022358E-05"
+        iyy="0.00100533682267837"
+        iyz="-2.69513285436901E-07"
+        izz="0.000795201372032254" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.525490196078431 0.525490196078431 0.525490196078431 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint1"
+    type="revolute">
+    <origin
+      xyz="0 0 0"
+      rpy="0 0 0" />
+    <parent
+      link="base_link" />
+    <child
+      link="link1" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="40"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="link2">
+    <inertial>
+      <origin
+        xyz="0.166772951554777 0.00133343750447744 -0.0529123106897995"
+        rpy="0 0 0" />
+      <mass
+        value="1.2030845470005" />
+      <inertia
+        ixx="0.000763772340354205"
+        ixy="-2.14315156193947E-05"
+        ixz="3.73077663532061E-09"
+        iyy="0.00662932005534295"
+        iyz="6.17284860926991E-09"
+        izz="0.00697795916787753" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.298039215686275 0.298039215686275 0.298039215686275 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint2"
+    type="revolute">
+    <origin
+      xyz="-0.0125 0.0483 0.085"
+      rpy="1.5708 -0.27343 3.1416" />
+    <parent
+      link="link1" />
+    <child
+      link="link2" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="0"
+      upper="1.69"
+      effort="40"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="link3">
+    <inertial>
+      <origin
+        xyz="0.151381490479682 5.58286750163006E-10 1.54737334057131E-15"
+        rpy="0 0 0" />
+      <mass
+        value="0.21057545092203" />
+      <inertia
+        ixx="7.32845327268275E-05"
+        ixy="1.00976936400377E-15"
+        ixz="1.94164029643432E-08"
+        iyy="0.00107561680138595"
+        iyz="2.09214504194762E-19"
+        izz="0.00108891525686989" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link3.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint3"
+    type="revolute">
+    <origin
+      xyz="0.36 0 -0.04695"
+      rpy="-3.1416 0 2.8207" />
+    <parent
+      link="link2" />
+    <child
+      link="link3" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.01"
+      upper="0.98"
+      effort="40"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="link_fo3">
+    <inertial>
+      <origin
+        xyz="0.0629433139060436 0.00228977747938039 -0.0300550992677305"
+        rpy="0 0 0" />
+      <mass
+        value="0.296088068281667" />
+      <inertia
+        ixx="0.000168484046032846"
+        ixy="-7.55868763670676E-05"
+        ixz="-2.196130165783E-08"
+        iyy="0.000264481031134757"
+        iyz="9.07665637087609E-13"
+        izz="0.000367885983716813" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo3.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.898039215686275 0.917647058823529 0.929411764705882 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo3.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_fo3"
+    type="continuous">
+    <origin
+      xyz="0.35582 0 -0.03005"
+      rpy="3.1416 0 -0.047476" />
+    <parent
+      link="link3" />
+    <child
+      link="link_fo3" />
+    <axis
+      xyz="0 0 1" />
+    <mimic
+      joint="joint3"
+      multiplier="1"
+      offset="0" /> 
+  </joint>
+  <link
+    name="link4">
+    <inertial>
+      <origin
+        xyz="-4.55320450171159E-06 -0.106963810758602 0.035313225239026"
+        rpy="0 0 0" />
+      <mass
+        value="0.331597742101891" />
+      <inertia
+        ixx="0.000549294098382911"
+        ixy="-9.07666477049039E-13"
+        ixz="-2.19613016574961E-08"
+        iyy="0.0001356215270235"
+        iyz="-1.14067871173502E-08"
+        izz="0.000572956011192102" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link4.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint4"
+    type="revolute">
+    <origin
+      xyz="0.089959 0.036251 -0.03005"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="link_fo3" />
+    <child
+      link="link4" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-1.74"
+      upper="1.74"
+      effort="40"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="link5">
+    <inertial>
+      <origin
+        xyz="9.60200378363751E-06 0.00042405332124229 0.0708823263397289"
+        rpy="0 0 0" />
+      <mass
+        value="0.157241376595175" />
+      <inertia
+        ixx="5.76749088512252E-05"
+        ixy="-9.07665717199825E-13"
+        ixz="2.19613016575658E-08"
+        iyy="7.34477643995526E-05"
+        iyz="1.14067864476608E-08"
+        izz="4.75700238235781E-05" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link5.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.298039215686275 0.298039215686275 0.298039215686275 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link5.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint5"
+    type="revolute">
+    <origin
+      xyz="0 -0.166 0.03625"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="link4" />
+    <child
+      link="link5" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="10"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="link6">
+    <inertial>
+      <origin
+        xyz="5.56268964042317E-05 0.0271165882016559 0.0503741401368465"
+        rpy="0 0 0" />
+      <mass
+        value="0.327912822470066" />
+      <inertia
+        ixx="0.000130747042046999"
+        ixy="-2.31909424839049E-07"
+        ixz="-5.13206607841642E-07"
+        iyy="0.000191440624214798"
+        iyz="-7.33307669154978E-06"
+        izz="0.000127924705156334" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link6.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.298039215686275 0.298039215686275 0.298039215686275 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link6.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint6"
+    type="revolute">
+    <origin
+      xyz="0 0.02375 0.087"
+      rpy="-1.5708 0 0" />
+    <parent
+      link="link5" />
+    <child
+      link="link6" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="10"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="link7">
+    <inertial>
+      <origin
+        xyz="-0.000129152383801415 8.17578156250554E-05 0.0027175376417754"
+        rpy="0 0 0" />
+      <mass
+        value="0.00706000334794754" />
+      <inertia
+        ixx="1.73385752275435E-06"
+        ixy="-2.10834120973133E-22"
+        ixz="2.65085861438835E-22"
+        iyy="1.73385752275435E-06"
+        iyz="3.29379178339262E-22"
+        izz="3.40212280669708E-06" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link7.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="1 1 1 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link7.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint7"
+    type="revolute">
+    <origin
+      xyz="8.1758E-05 0.0075 0.056129"
+      rpy="1.5708 -1.5708 0" />
+    <parent
+      link="link6" />
+    <child
+      link="link7" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.14"
+      upper="3.14"
+      effort="10"
+      velocity="3.14" />
+  </joint>
+  <link
+    name="link_fo2">
+    <inertial>
+      <origin
+        xyz="0.14674443857331 0.00628512855090282 1.80411241501588E-15"
+        rpy="0 0 0" />
+      <mass
+        value="0.150444871939757" />
+      <inertia
+        ixx="3.49751305357588E-05"
+        ixy="-3.73648814395138E-05"
+        ixz="9.07803169811594E-09"
+        iyy="0.000905761502652756"
+        iyz="-8.33233797977117E-09"
+        izz="0.000892696334631136" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo2.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.890196078431372 0.890196078431372 0.913725490196078 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo2.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_fo2"
+    type="continuous">
+    <origin
+      xyz="0.37753 0.062518 -0.04695"
+      rpy="3.1416 0 2.8635" />
+    <parent
+      link="link2" />
+    <child
+      link="link_fo2" />
+    <axis
+      xyz="0 0 1" />
+    <mimic
+      joint="joint3"
+      multiplier="1"
+      offset="0" />
+  </joint>
+  <link
+    name="link_fo1">
+    <inertial>
+      <origin
+        xyz="0.182758605576829 -3.63320484808582E-14 -0.0445499999999997"
+        rpy="0 0 0" />
+      <mass
+        value="0.0819960174616949" />
+      <inertia
+        ixx="3.4780788984771E-06"
+        ixy="1.56701095242046E-20"
+        ixz="-1.37333666624274E-20"
+        iyy="0.000911908403866868"
+        iyz="-4.27077917573181E-21"
+        izz="0.000915044832692588" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo1.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.0549019607843137 0.0549019607843137 0.0549019607843137 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo1.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_fo1"
+    type="continuous">
+    <origin
+      xyz="0.088498 0.0459 0.12199"
+      rpy="1.5708 -0.27343 3.1416" />
+    <parent
+      link="link1" />
+    <child
+      link="link_fo1" />
+    <axis
+      xyz="0 0 1" />
+    <mimic
+      joint="joint2"
+      multiplier="1"
+      offset="0" />
+  </joint>
+  <link
+    name="link_fo4">
+    <inertial>
+      <origin
+        xyz="0.0575984566023708 -0.0185399479707732 0.0345500000000023"
+        rpy="0 0 0" />
+      <mass
+        value="0.118647891053121" />
+      <inertia
+        ixx="6.18568746674075E-05"
+        ixy="3.00837364008574E-05"
+        ixz="-3.68878434100148E-20"
+        iyy="0.000146141020927511"
+        iyz="8.38380120615959E-20"
+        izz="0.000207681501218777" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo4.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.898039215686275 0.917647058823529 0.929411764705882 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://wust_arm_7axis_description/meshes/link_fo4.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="joint_fo4"
+    type="continuous">
+    <origin
+      xyz="0.36 0 -0.01"
+      rpy="-3.1416 0 -0.62454" />
+    <parent
+      link="link_fo1" />
+    <child
+      link="link_fo4" />
+    <axis
+      xyz="0 0 1" />
+    <mimic
+      joint="joint2"
+      multiplier="1"
+      offset="0" />
+  </joint>
+
+  <!-- 虚拟吸盘 TCP -->
+  <link name="vacuum_tcp"/>
+  <joint name="vacuum_joint" type="fixed">
+    <parent link="link7"/>
+    <child link="vacuum_tcp"/>
+    <origin xyz="0 0 0.03" rpy="0 0 0"/> <!-- 根据吸盘实际位置调整 -->
+  </joint>
+
+  <!-- 相机坐标系 -->
+  <link name="camera_optical_frame"/>
+    <joint name="camera_optical_joint" type="fixed">
+      <parent link="camera_link"/>
+      <child name="camera_optical_frame"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/> <!-- 根据相机实际位置调整 -->
+    </joint>
+
+  <link name="camera_link">
+      <visual>
+        <geometry>
+          <box size="0.02 0.05 0.02"/> </geometry>
+        <material name="blue">
+          <color rgba="0 0 1 1"/>
+        </material>
+      </visual>
+    </link>
+</robot>
