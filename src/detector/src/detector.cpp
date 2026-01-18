@@ -156,7 +156,7 @@ std::vector<cv::Point2f> ExchangeSlotDetector::findSmallSquares(const cv::Mat &b
     return centers;
 }
 
-// 4. ⻆点排序核心逻辑
+// 角点排序
 std::vector<cv::Point2f> ExchangeSlotDetector::getSortedCorners(
     const std::vector<cv::Point2f> &corners,
     const std::vector<cv::Point2f> &small_squares,
@@ -164,78 +164,112 @@ std::vector<cv::Point2f> ExchangeSlotDetector::getSortedCorners(
 {
     if (corners.size() != 4) return {};
 
-    // 1. 计算当前 4 个角点的几何中心
+    // 1. 计算几何中心
     cv::Point2f center(0, 0);
     for (const auto& p : corners) center += p;
     center *= 0.25f;
 
-    // 2. 极角排序 (建立稳定的相对顺序)
-    struct IndexedPoint { 
-        int original_idx; // 对应 corners 和 contours 的原始下标
-        float angle; 
-        cv::Point2f pt; 
+    // 2. 极角排序（建立稳定的环）
+    struct IndexedPoint {
+        int original_idx;
+        float angle;
+        cv::Point2f pt;
     };
+
     std::vector<IndexedPoint> pts;
+    pts.reserve(4);
+
     for (int i = 0; i < 4; i++) {
-        float ang = std::atan2(corners[i].y - center.y, corners[i].x - center.x);
+        float ang = std::atan2(corners[i].y - center.y,
+                               corners[i].x - center.x);
         pts.push_back({i, ang, corners[i]});
     }
-    std::sort(pts.begin(), pts.end(), [](const IndexedPoint& a, const IndexedPoint& b) {
-        return a.angle < b.angle; 
-    });
 
-    // 3. 寻找起始点 (0号点)
+    std::sort(pts.begin(), pts.end(),
+              [](const IndexedPoint& a, const IndexedPoint& b) {
+                  return a.angle < b.angle;
+              });
+
+    // 3. 寻找“特殊角点”（start_pos）
     int start_pos = -1;
 
-    // --- 策略 A: 小方块优先 ---
+    // --- 策略 A：小方块优先 ---
     if (!small_squares.empty()) {
         cv::Point2f avg_sq(0, 0);
         for (const auto &p : small_squares) avg_sq += p;
         avg_sq *= (1.0f / small_squares.size());
-        
+
         double min_d = 1e9;
         for (int i = 0; i < 4; i++) {
             double d = cv::norm(pts[i].pt - avg_sq);
-            if (d < min_d) { min_d = d; start_pos = i; }
+            if (d < min_d) {
+                min_d = d;
+                start_pos = i;
+            }
         }
         std::cout << "[Sorting Log] Strategy A (Small Squares) Success." << std::endl;
-    } 
-    // --- 策略 B: 上帧记忆 ---
-    // else if (has_last_pose_ && !last_corners_.empty()) {
-    //     double min_d = 1e9;
-    //     for (int i = 0; i < 4; i++) {
-    //         double d = cv::norm(pts[i].pt - last_corners_[0]);
-    //         if (d < min_d) { min_d = d; start_pos = i; }
-    //     }
-    //     if (min_d > 100.0) start_pos = -1; // 跳变过大则失效
-    //     if (start_pos != -1) std::cout << "[Sorting Log] Strategy B (Memory) Success." << std::endl;
-    // }
+    }
+    // --- 策略 B：上帧记忆  ---
+    /*
+    else if (has_last_pose_ && !last_corners_.empty()) {
+        double min_d = 1e9;
+        for (int i = 0; i < 4; i++) {
+            double d = cv::norm(pts[i].pt - last_corners_[0]);
+            if (d < min_d) {
+                min_d = d;
+                start_pos = i;
+            }
+        }
+        if (min_d > 100.0) start_pos = -1;
+        if (start_pos != -1)
+            std::cout << "[Sorting Log] Strategy B (Memory) Success." << std::endl;
+    }
+    */
 
-    // --- 策略 C: 面积最小判别法 (兜底) ---
+    // --- 策略 C：面积最小兜底 ---
     if (start_pos == -1) {
         double min_area = 1e9;
         for (int i = 0; i < 4; i++) {
-            // pts[i].original_idx 对应 findCornerPoints 传入的 contours 下标
             double area = cv::contourArea(contours[pts[i].original_idx]);
             if (area < min_area) {
                 min_area = area;
                 start_pos = i;
             }
         }
-        std::cout << "[Sorting Log] Strategy C (Min Area) Success. Target Area: " << min_area << std::endl;
+        std::cout << "[Sorting Log] Strategy C (Min Area) Success. Target Area: "
+                  << min_area << std::endl;
     }
 
-    // 4. 从 start_pos 开始重新组装 (保持极角排序的环状顺序)
-    std::vector<cv::Point2f> sorted;
+    //    将“特殊角点”映射到 object_points 的 0/1/2/3（左上，右上，右下，左下）
+    cv::Point2f sp = pts[start_pos].pt;
+    float dx = sp.x - center.x;
+    float dy = sp.y - center.y;
+
+    // object_points:
+    // 0: 左上, 1: 右上, 2: 右下, 3: 左下
+    int obj_idx;
+    if (dx < 0 && dy < 0) {
+        obj_idx = 0; // 左上
+    } else if (dx > 0 && dy < 0) {
+        obj_idx = 1; // 右上
+    } else if (dx > 0 && dy > 0) {
+        obj_idx = 2; // 右下
+    } else {
+        obj_idx = 3; // 左下
+    }
+
+    // 环状重排，使 corners[i] 语义 == object_points[i]
+    std::vector<cv::Point2f> sorted(4);
+
     for (int i = 0; i < 4; i++) {
-        sorted.push_back(pts[(start_pos + i) % 4].pt);
+        int src = (start_pos + i) % 4;
+        int dst = (obj_idx + i) % 4;
+        sorted[dst] = pts[src].pt;
     }
 
     return sorted;
 }
-// 重新排列：从 start_pos 开始取出 4 个点
-// 注意：根据你的 Object Points 定义（右上->左上->左下->右下），这通常是逆时针顺序
-// 如果发现 0-1-2-3 是顺时针，请将上面的排序改为 a.angle > b.angle
+
 
 void ExchangeSlotDetector::filterCorners(std::vector<cv::Point2f> &current)
 {
@@ -244,16 +278,15 @@ void ExchangeSlotDetector::filterCorners(std::vector<cv::Point2f> &current)
     last_corners_ = current;
 }
 
-// 6. PNP 解算：SOLVEPNP_IPPE_SQUARE
+// PNP 解算：SOLVEPNP_IPPE_SQUARE，输入顺序为左上、右上、右下、左下
 bool ExchangeSlotDetector::solvePnP_IPPE(const std::vector<cv::Point2f> &corners, Pose &pose)
 {
     double s = square_size_ / 2.0;
-    // 按照顺时针定义：0:右上, 1:右下, 2:左下, 3:左上
     std::vector<cv::Point3f> object_points = {
-        { (float)s,  (float)s, 0}, // 0: 右上 (假设 0 号是双小方块角)
-        { (float)s, -(float)s, 0}, // 1: 右下
-        {-(float)s, -(float)s, 0}, // 2: 左下
-        {-(float)s,  (float)s, 0}  // 3: 左上
+        { (float)-s, (float)s,  0 }, // 0：左上
+        { (float)s,  (float)s,  0 }, // 1：右上
+        { (float)s,  (float)-s, 0 }, // 2：右下
+        { (float)-s, (float)-s, 0 }  // 3：左下
     };
 
     cv::Mat rvec, tvec;
@@ -262,13 +295,8 @@ bool ExchangeSlotDetector::solvePnP_IPPE(const std::vector<cv::Point2f> &corners
                            rvec, tvec, false, cv::SOLVEPNP_IPPE_SQUARE);
     
     if (ok) {
-        pose.rvec = rvec; pose.tvec = tvec;
-        cv::Mat R; cv::Rodrigues(rvec, R);
-        double trace = R.at<double>(0,0) + R.at<double>(1,1) + R.at<double>(2,2);
-        double qw = std::sqrt(1.0 + trace) / 2.0;
-        pose.quat = cv::Vec4d(qw, (R.at<double>(2,1) - R.at<double>(1,2)) / (4.0 * qw),
-                                  (R.at<double>(0,2) - R.at<double>(2,0)) / (4.0 * qw),
-                                  (R.at<double>(1,0) - R.at<double>(0,1)) / (4.0 * qw));
+        pose.rvec = rvec; 
+        pose.tvec = tvec;
     }
     return ok;
 }

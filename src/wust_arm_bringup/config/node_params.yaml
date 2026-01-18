@@ -21,10 +21,10 @@
 /hik_camera:
   ros__parameters:
     # 模式选择: "camera" (海康相机), "video" (读取本地mp4/avi), "image" (读取单张图片)
-    input_type: "video"
+    input_type: "image"
     # 本地文件路径 (仅当 input_type 为 video 或 image 时生效)
     # 支持绝对路径或在启动脚本中处理
-    file_path: "/home/auauau/wust_arm_7axis_ws/raw_video/blue.mp4"
+    file_path: "/home/auauau/wust_arm_7axis_ws/raw_picture/test_red_3.png"
     camera_info_url: "package://wust_arm_bringup/config/camera_info.yaml"
     # --- 相机基础设置 ---
     camera_name: "narrow_stereo"

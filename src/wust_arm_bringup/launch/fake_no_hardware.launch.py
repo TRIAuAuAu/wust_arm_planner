@@ -112,7 +112,7 @@ def generate_launch_description():
         robot_state_publisher,
         move_group_node,
         wust_arm_driver_node,
-        # detector_container,
+        detector_container,
         rviz_node,
         # delay_mtc_node,
     ])

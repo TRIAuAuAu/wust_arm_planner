@@ -7,7 +7,7 @@ exchange_slot_detector:
     debug: true
     no_hardware: true
     # 本地视频或图片路径
-    local_path: "/home/auauau/wust_arm_7axis_ws/raw_video/blue_frame.mp4"
+    local_path: "raw_picture/test_blue_5.png"
     
     # --- 8mm 相机真实内参 ---
     # 矩阵顺序：[fx, 0, cx, 0, fy, cy, 0, 0, 1]

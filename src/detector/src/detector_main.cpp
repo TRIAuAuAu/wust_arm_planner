@@ -92,7 +92,7 @@ bool debugDetect(cv::Mat &input, exchange_slot::ExchangeSlotDetector &detector) 
     return false;
 }
 int main(int argc, char** argv) {
-    std::string config_path = "src/detector/config/exchange_slot.yaml";
+    std::string config_path = "src/detector/config/exchange_slot_detector.yaml";
     if (argc > 1) config_path = argv[1];
 
     YAML::Node config = YAML::LoadFile(config_path);

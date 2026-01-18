@@ -14,11 +14,15 @@ ExchangeSlotDetectorNode::ExchangeSlotDetectorNode(const rclcpp::NodeOptions & o
   detector_ = std::make_unique<ExchangeSlotDetector>();
 
   // 1. 参数与 Marker 初始化
-  double square_size = this->declare_parameter("square_size", 0.25);
+  this->declare_parameter("square_size", 0.25);
   this->declare_parameter("debug", true);
-  debug_ = this->get_parameter("debug").as_bool();
   this->declare_parameter("binary_thresh", 150);
-  this->declare_parameter("no_hardware", true); // 新增参数
+  this->declare_parameter("no_hardware", true);
+
+  double square_size = this->get_parameter("square_size").as_double();
+  debug_ = this->get_parameter("debug").as_bool();
+  no_hardware_ = this->get_parameter("no_hardware").as_bool();
+
 
   // 初始化TF
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -84,47 +88,48 @@ void ExchangeSlotDetectorNode::imageCallback(const sensor_msgs::msg::Image::Cons
   if (detected) {
     auto pose_data = detector_->getLastPose();
     
-    // 构造 Pose 消息
-    geometry_msgs::msg::PoseStamped pose_msg;
-    // 关键点：使用图像的时间戳，确保在 RViz 中与图像同步
-    pose_msg.header = img_msg->header; 
-    pose_msg.pose.position.x = pose_data.tvec[0];
-    pose_msg.pose.position.y = pose_data.tvec[1];
-    pose_msg.pose.position.z = pose_data.tvec[2];
+    // 先构造相对于相机的位姿 (Camera Frame)
+    geometry_msgs::msg::PoseStamped pose_in_camera;
+    pose_in_camera.header = img_msg->header; // 此时 frame_id 是 camera_optical_frame
+    pose_in_camera.pose.position.x = pose_data.tvec[0];
+    pose_in_camera.pose.position.y = pose_data.tvec[1];
+    pose_in_camera.pose.position.z = pose_data.tvec[2];
 
     cv::Mat rot_mat;
     cv::Rodrigues(pose_data.rvec, rot_mat);
-    tf2::Matrix3x3 tf2_rot(rot_mat.at<double>(0,0), rot_mat.at<double>(0,1), rot_mat.at<double>(0,2),
-                           rot_mat.at<double>(1,0), rot_mat.at<double>(1,1), rot_mat.at<double>(1,2),
-                           rot_mat.at<double>(2,0), rot_mat.at<double>(2,1), rot_mat.at<double>(2,2));
+    tf2::Matrix3x3 tf2_rot(
+        rot_mat.at<double>(0,0), rot_mat.at<double>(0,1), rot_mat.at<double>(0,2),
+        rot_mat.at<double>(1,0), rot_mat.at<double>(1,1), rot_mat.at<double>(1,2),
+        rot_mat.at<double>(2,0), rot_mat.at<double>(2,1), rot_mat.at<double>(2,2)
+    );
     tf2::Quaternion q;
     tf2_rot.getRotation(q);
-    // pose_msg.pose.orientation = tf2::toMsg(q);
-    // 若发现z轴反向，可在此处进行修正
-    tf2::Quaternion q_rotate;
-    q_rotate.setRPY(M_PI, 0, 0); 
-    q = q * q_rotate;
-    pose_msg.pose.orientation = tf2::toMsg(q);
+    pose_in_camera.pose.orientation = tf2::toMsg(q);
+    try {
+        // 统一转到 base_link（机械臂底座）
+        geometry_msgs::msg::PoseStamped pose_in_world = tf_buffer_->transform(pose_in_camera, "base_link");
+        
+        target_pose_pub_->publish(pose_in_world);
 
-    // 发布 TF (rm_vision 风格的核心)
-    geometry_msgs::msg::TransformStamped t;
-    t.header = img_msg->header;
-    t.child_frame_id = "target_slot";
-    t.transform.translation.x = pose_msg.pose.position.x;
-    t.transform.translation.y = pose_msg.pose.position.y;
-    t.transform.translation.z = pose_msg.pose.position.z;
-    t.transform.rotation = pose_msg.pose.orientation;
-    tf_broadcaster_->sendTransform(t);
-
-    // 始终发布 Pose 供后续业务逻辑逻辑使用
-    target_pose_pub_->publish(pose_msg);
-    
-    if (debug_) {
-      publishMarkers(pose_msg.pose, pose_msg.header);
-      detector_->drawResults(img);
-    }
+        if (debug_) {
+          // 直接传pose_in_world 给 marker
+          publishMarkers(pose_in_world.pose, pose_in_world.header);
+          detector_->drawResults(img);
+          
+          // 发布 TF
+          geometry_msgs::msg::TransformStamped t;
+          t.header = pose_in_world.header;
+          t.child_frame_id = "target_slot_fixed";
+          t.transform.translation.x = pose_in_world.pose.position.x;
+          t.transform.translation.y = pose_in_world.pose.position.y;
+          t.transform.translation.z = pose_in_world.pose.position.z;
+          t.transform.rotation = pose_in_world.pose.orientation;
+          tf_broadcaster_->sendTransform(t);
+        }
+      } catch (const tf2::TransformException & ex) {
+        RCLCPP_ERROR(get_logger(), "Transform failed: %s", ex.what());
+      }
   }
-
   // 图像发布
   if (debug_) {
     std::stringstream ss;
@@ -141,41 +146,20 @@ void ExchangeSlotDetectorNode::imageCallback(const sensor_msgs::msg::Image::Cons
 void ExchangeSlotDetectorNode::publishMarkers(const geometry_msgs::msg::Pose & pose, const std_msgs::msg::Header & header)
 {
   visualization_msgs::msg::MarkerArray ma;
-  bool no_hardware_ = this->get_parameter("no_hardware").as_bool();
-  
-  std_msgs::msg::Header m_header = header;
-  geometry_msgs::msg::Pose global_pose = pose;
 
-  if (!no_hardware_) {
-    try {
-      // 1. 构造一个相对于 camera_optical_frame 的 PoseStamped
-      geometry_msgs::msg::PoseStamped ps_in, ps_out;
-      ps_in.header = header;
-      ps_in.pose = pose;
-
-      // 2. 利用 tf_buffer 转换到 world 系
-      // 注意：这里要用 header.stamp 确保查询的是图像拍摄那一刻的机械臂姿态
-      ps_out = tf_buffer_->transform(ps_in, "world", tf2::durationFromSec(0.1));
-      
-      global_pose = ps_out.pose;
-      m_header.frame_id = "world";
-      m_header.stamp = ps_out.header.stamp;
-    } catch (tf2::TransformException & ex) {
-      RCLCPP_ERROR(this->get_logger(), "TF Transform error: %s", ex.what());
-      return; // 如果转换失败，不发布 Marker，避免位置乱跳
-    }
-  }
-
-  // 后续 Marker 构造使用 global_pose 和 m_header
-  base_marker_.header = m_header;
-  base_marker_.pose = global_pose;
+  // 输入的 pose 是 world/base_link 坐标系下的
+  base_marker_.header = header; 
+  base_marker_.pose = pose;
   base_marker_.id = 0;
 
-  cylinder_marker_.header = m_header;
+  cylinder_marker_.header = header;
+  
+  // 计算圆柱体相对于底座的偏移
   tf2::Transform tf_base, tf_offset, tf_cylinder;
-  tf2::fromMsg(global_pose, tf_base);
-  tf_offset.setOrigin(tf2::Vector3(0, 0, 0.1)); 
+  tf2::fromMsg(pose, tf_base);
+  tf_offset.setOrigin(tf2::Vector3(0, 0, 0.1)); // 向上偏移 10cm
   tf_offset.setRotation(tf2::Quaternion::getIdentity());
+  
   tf_cylinder = tf_base * tf_offset;
   tf2::toMsg(tf_cylinder, cylinder_marker_.pose);
   cylinder_marker_.id = 1;

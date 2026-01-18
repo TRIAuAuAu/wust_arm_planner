@@ -687,7 +687,7 @@
     <origin xyz="0 0 0.03" rpy="0 0 0"/> <!-- 根据吸盘实际位置调整 -->
   </joint>
 
-  <!-- 相机坐标系 -->
+ <!-- 相机坐标系 -->
   <link name="camera_link">
       <visual>
         <geometry>
@@ -708,6 +708,6 @@
     <joint name="camera_optical_joint" type="fixed">
       <parent link="camera_link"/>
       <child link="camera_optical_frame"/> <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/> 
-    </joint>
+    </joint> 
 
 </robot>
