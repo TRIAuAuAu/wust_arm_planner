@@ -116,9 +116,9 @@ void WustArmDriver::getParams()
   controller_freq_      = this->get_parameter("controller_freq").as_int();
   debug_                =     this->get_parameter("debug").as_bool();
 
-  // 打印确认，防止再次出现 0
-  RCLCPP_INFO(this->get_logger(), "Mode: %s, Freq: %d, Tolerance: %.3f", 
-              use_fake_hardware_ ? "FAKE" : "REAL", controller_freq_, goal_tolerance_);
+  // 打印确认
+  // RCLCPP_INFO(this->get_logger(), "Mode: %s, Freq: %d, Tolerance: %.3f", 
+  //             use_fake_hardware_ ? "FAKE" : "REAL", controller_freq_, goal_tolerance_);
 
   // 串口配置
   auto fc = drivers::serial_driver::FlowControl::NONE;
@@ -206,6 +206,7 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
   }
 
+  std::this_thread::sleep_for(std::chrono::milliseconds(200)); // 额外静止 200ms，防止因为抖动判定失败了
   result->error_code = FollowJointTrajectory::Result::SUCCESSFUL;
   goal_handle->succeed(result);
   RCLCPP_INFO(get_logger(), "Goal Reached Succeeded!");

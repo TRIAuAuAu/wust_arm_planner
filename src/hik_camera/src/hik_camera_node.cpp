@@ -35,7 +35,7 @@ HikCameraNode::HikCameraNode(const rclcpp::NodeOptions & options) : Node("hik_ca
     MV_CC_DEVICE_INFO_LIST device_list;
     nRet = MV_CC_EnumDevices(MV_USB_DEVICE, &device_list);
     
-    // 如果没插相机，这里会循环等待，不会崩溃
+    // 如果没插相机，会循环等待，不会崩溃
     while (device_list.nDeviceNum == 0 && rclcpp::ok()) {
       RCLCPP_ERROR(this->get_logger(), "No Hik Camera found! Please check hardware. Retrying...");
       std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -65,7 +65,7 @@ HikCameraNode::HikCameraNode(const rclcpp::NodeOptions & options) : Node("hik_ca
       RCLCPP_FATAL(this->get_logger(), "File path is empty! Please set 'file_path' parameter.");
       return;
     }
-    // 视频或图片模式不需要初始化任何海康 SDK 句柄
+    // 视频或图片模式不需要初始化任何海康 SDK 
     capture_thread_ = std::thread(&HikCameraNode::localFileLoop, this);
   }
 }
@@ -80,6 +80,7 @@ void HikCameraNode::hikCameraLoop()
   while (rclcpp::ok() && is_running_) {
     nRet = MV_CC_GetImageBuffer(camera_handle_, &out_frame, 1000);
     if (MV_OK == nRet) {
+      image_msg_.header.stamp = this->now();
       // 转换
       image_msg_.height = out_frame.stFrameInfo.nHeight;
       image_msg_.width = out_frame.stFrameInfo.nWidth;
@@ -96,7 +97,6 @@ void HikCameraNode::hikCameraLoop()
 
       MV_CC_ConvertPixelType(camera_handle_, &convert_param_);
 
-      image_msg_.header.stamp = this->now();
       camera_info_msg_.header = image_msg_.header;
       camera_pub_.publish(image_msg_, camera_info_msg_);
 
@@ -148,7 +148,7 @@ void HikCameraNode::localFileLoop()
 
       cv::Mat rgb_frame;
       cv::cvtColor(frame, rgb_frame, cv::COLOR_BGR2RGB);
-
+  
       auto msg = cv_bridge::CvImage(std_msgs::msg::Header(), "rgb8", rgb_frame).toImageMsg();
       msg->header.stamp = this->now();
       msg->header.frame_id = "camera_optical_frame";

@@ -9,12 +9,14 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(OpenCV 4.5 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
 find_package(yaml-cpp REQUIRED) # 新增 YAML 解析库
@@ -30,7 +32,7 @@ target_include_directories(detector_component PUBLIC
 )
 ament_target_dependencies(detector_component
   rclcpp rclcpp_components sensor_msgs cv_bridge image_transport 
-  geometry_msgs visualization_msgs tf2_geometry_msgs OpenCV tf2_ros
+  geometry_msgs visualization_msgs tf2_geometry_msgs OpenCV tf2_ros std_srvs
 )
 
 # 2. 编译独立可执行文件
