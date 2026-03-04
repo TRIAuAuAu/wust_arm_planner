@@ -47,7 +47,7 @@ move_group_node = Node(
 mtc_place_node = Node(
     package="mtc_place",
     executable="mtc_place_node",
-    output="screen",
+    output="both",
     parameters=[
         moveit_config.robot_description,
         moveit_config.robot_description_semantic,
@@ -56,6 +56,7 @@ mtc_place_node = Node(
         moveit_config.joint_limits,
         {"planning_plugin": "ompl_interface/OMPLPlanner"}
     ],
+    ros_arguments=['--log-level', 'mtc_place:='+launch_params['mtc_node_log_level']],
 )
 
 

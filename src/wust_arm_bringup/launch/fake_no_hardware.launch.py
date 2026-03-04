@@ -13,7 +13,7 @@ bringup_path = get_package_share_directory('wust_arm_bringup')
 sys.path.append(os.path.join(bringup_path, 'launch'))
 
 def generate_launch_description():
-    from common import launch_params,node_params,detector_container
+    from common import launch_params,node_params,detector_container,mtc_place_node
     # ========== MoveIt Config ==========
     moveit_config = (
         MoveItConfigsBuilder("wust_arm_7axis")
@@ -83,24 +83,6 @@ def generate_launch_description():
     )
 
     # ========== MTC ==========
-    #  自定义 mtc_place_node
-    mtc_place_node = Node(
-        package="mtc_place",
-        executable="mtc_place_node",
-        output="both",
-        parameters=[
-            moveit_config.robot_description,
-            moveit_config.robot_description_semantic,
-            moveit_config.robot_description_kinematics,
-            moveit_config.planning_pipelines,
-            moveit_config.joint_limits,
-            {
-                "planning_plugin": "ompl_interface/OMPLPlanner"
-            }
-        ],
-        ros_arguments=['--ros-args', '--log-level',
-                       f'mtc_place_node:={launch_params["mtc_node_log_level"]}'],
-    )
     # 延迟启动 MTC 节点，确保驱动和 MoveGroup 已就绪
     delay_mtc_node = TimerAction(
         period=1.0,
@@ -114,5 +96,5 @@ def generate_launch_description():
         wust_arm_driver_node,
         detector_container,
         rviz_node,
-        # delay_mtc_node,
+        delay_mtc_node,
     ])

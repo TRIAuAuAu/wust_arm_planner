@@ -207,7 +207,7 @@ std::vector<cv::Point2f> ExchangeSlotDetector::getSortedCorners(
                 start_pos = i;
             }
         }
-        std::cout << "[Sorting Log] Strategy A (Small Squares) Success." << std::endl;
+        // std::cout << "[Sorting Log] Strategy A (Small Squares) Success." << std::endl;
     }
     // --- 策略 B：上帧记忆  ---
     /*
@@ -236,8 +236,8 @@ std::vector<cv::Point2f> ExchangeSlotDetector::getSortedCorners(
                 start_pos = i;
             }
         }
-        std::cout << "[Sorting Log] Strategy C (Min Area) Success. Target Area: "
-                  << min_area << std::endl;
+        // std::cout << "[Sorting Log] Strategy C (Min Area) Success. Target Area: "
+                //   << min_area << std::endl;
     }
 
     //    将“特殊角点”映射到 object_points 的 0/1/2/3（左上，右上，右下，左下）
@@ -322,19 +322,19 @@ bool ExchangeSlotDetector::validatePose(const std::vector<cv::Point2f> &corners,
     }
 
     // 3. 重投影数值验证 (暂时注释掉阈值过滤，仅保留状态记录)
-    /*
-    double s = square_size_ / 2.0;
-    std::vector<cv::Point3f> object_points = {
-        {(float)s, (float)s, 0}, {(float)s, -(float)s, 0},
-        {-(float)s, -(float)s, 0}, {-(float)s, (float)s, 0}
-    };
-    std::vector<cv::Point2f> projected;
-    cv::projectPoints(object_points, pose.rvec, pose.tvec, camera_matrix_, dist_coeffs_, projected);
     
-    double total_err = 0;
-    for (int i = 0; i < 4; i++) total_err += cv::norm(projected[i] - corners[i]);
-    if ((total_err / 4.0) > 20.0) return false; 
-    */
+    // double s = square_size_ / 2.0;
+    // std::vector<cv::Point3f> object_points = {
+    //     {(float)s, (float)s, 0}, {(float)s, -(float)s, 0},
+    //     {-(float)s, -(float)s, 0}, {-(float)s, (float)s, 0}
+    // };
+    // std::vector<cv::Point2f> projected;
+    // cv::projectPoints(object_points, pose.rvec, pose.tvec, camera_matrix_, dist_coeffs_, projected);
+    
+    // double total_err = 0;
+    // for (int i = 0; i < 4; i++) total_err += cv::norm(projected[i] - corners[i]);
+    // if ((total_err / 4.0) > 20.0) return false; 
+    
 
     // 4. 成功后记录状态（用于无方块时的历史补全）
     last_corners_ = corners;

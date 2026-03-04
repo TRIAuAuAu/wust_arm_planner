@@ -3,7 +3,8 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/utils.h>
-
+using GetDetectorState = detector_interfaces::srv::GetDetectorState;
+using SetDetectorState = detector_interfaces::srv::SetDetectorState;
 namespace exchange_slot
 {
 ExchangeSlotDetectorNode::ExchangeSlotDetectorNode(const rclcpp::NodeOptions & options)
@@ -23,7 +24,6 @@ ExchangeSlotDetectorNode::ExchangeSlotDetectorNode(const rclcpp::NodeOptions & o
   this->declare_parameter("lost_buffer_limit", 5); // 允许丢失 5 帧
   this->declare_parameter("square_size", 0.10);
   this->declare_parameter("binary_thresh", 150);
-  
 
   debug_ = this->get_parameter("debug").as_bool();
   no_hardware_ = this->get_parameter("no_hardware").as_bool();
@@ -58,7 +58,7 @@ ExchangeSlotDetectorNode::ExchangeSlotDetectorNode(const rclcpp::NodeOptions & o
   cylinder_marker_.lifetime = rclcpp::Duration::from_seconds(0.1);
 
   // 2. 发布者与订阅者
-  target_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/exchange_slot/target_pose", 10);
+  slot_pose_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("/exchange_slot/slot_pose", 10);
   marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("/exchange_slot/marker", 10);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
 
@@ -77,12 +77,21 @@ ExchangeSlotDetectorNode::ExchangeSlotDetectorNode(const rclcpp::NodeOptions & o
     "/image_raw", rclcpp::SensorDataQoS(),
     std::bind(&ExchangeSlotDetectorNode::imageCallback, this, std::placeholders::_1));
   // 3. 服务
-  lock_service_ = this->create_service<std_srvs::srv::SetBool>(
-  "/set_planning_lock",
-  std::bind(&ExchangeSlotDetectorNode::handleLockService, this, std::placeholders::_1, std::placeholders::_2));
+  get_state_srv_ = this->create_service<GetDetectorState>(
+    "/detector/get_state",
+    std::bind(&ExchangeSlotDetectorNode::getStateCb,
+              this, std::placeholders::_1, std::placeholders::_2)
+  );
+
+  set_state_srv_ = this->create_service<SetDetectorState>(
+    "/detector/set_state",
+    std::bind(&ExchangeSlotDetectorNode::setStateCb,
+              this, std::placeholders::_1, std::placeholders::_2)
+  );
 }
 
-void ExchangeSlotDetectorNode::imageCallback(const sensor_msgs::msg::Image::ConstSharedPtr img_msg)
+void ExchangeSlotDetectorNode::imageCallback(
+    const sensor_msgs::msg::Image::ConstSharedPtr img_msg)
 {
   auto cv_ptr = cv_bridge::toCvShare(img_msg, "rgb8");
   cv::Mat img = cv_ptr->image.clone(); 
@@ -95,6 +104,7 @@ void ExchangeSlotDetectorNode::imageCallback(const sensor_msgs::msg::Image::Cons
   auto latency = (this->now() - img_msg->header.stamp).seconds() * 1000.0;
 
   if (detected) {
+
     lost_frames_counter_ = 0; // 只要识别到，重置丢失缓冲
     auto pose_data = detector_->getLastPose();
     
@@ -112,79 +122,127 @@ void ExchangeSlotDetectorNode::imageCallback(const sensor_msgs::msg::Image::Cons
         rot_mat.at<double>(1,0), rot_mat.at<double>(1,1), rot_mat.at<double>(1,2),
         rot_mat.at<double>(2,0), rot_mat.at<double>(2,1), rot_mat.at<double>(2,2)
     );
-    tf2::Quaternion q; tf2_rot.getRotation(q);
+    tf2::Quaternion q; 
+    tf2_rot.getRotation(q);
     pose_in_camera.pose.orientation = tf2::toMsg(q);
 
     try {
-      // 2. 转换到 base_link (消除相机运动影响的关键)
-      geometry_msgs::msg::PoseStamped pose_in_world = tf_buffer_->transform(pose_in_camera, "base_link", tf2::durationFromSec(0.05));
+
+      // 2. 转换到 base_link (消除相机运动影响)
+      geometry_msgs::msg::PoseStamped pose_in_world =
+          tf_buffer_->transform(pose_in_camera, "base_link", tf2::durationFromSec(0.05));
+
+      pose_in_world.header.frame_id = "base_link";
+
+      // 缩放修正 (实验调参)
+      // pose_in_world.pose.position.x *= 0.85;
+      // pose_in_world.pose.position.y *= 0.7;
+      // pose_in_world.pose.position.z *= 1.1;
 
       // 3. 状态机逻辑
       if (current_state_ == State::LOST) {
+
         current_state_ = State::TRACKING;
         locked_pose_ = pose_in_world.pose;
         stable_frames_ = 0;
+
       } 
       else if (current_state_ == State::TRACKING) {
+
         if (isStable(pose_in_world.pose, locked_pose_)) {
           stable_frames_++;
+
           if (stable_frames_ >= stable_threshold_ || force_lock_) {
             current_state_ = State::LOCKED;
             locked_pose_ = pose_in_world.pose; // 锁定最终值
             RCLCPP_INFO(this->get_logger(), "Target LOCKED at stable position.");
           }
-        } else {
+        } 
+        else {
           // 如果位姿跳变剧烈，说明没稳住，以最新帧为基准重新计数
           stable_frames_ = 0;
           locked_pose_ = pose_in_world.pose; 
         }
       }
-      // 注意：LOCKED 状态下不再执行上面的更新逻辑，locked_pose_ 保持不变
 
+      // LOCKED / PLANNING / EXECUTING 状态下不更新 locked_pose_
+      // 视觉完全冻结，只靠之前锁定的位姿保持稳定，直到收到新的状态命令
       // 4. 统一发布逻辑
       geometry_msgs::msg::PoseStamped final_out_pose = pose_in_world;
-      if (current_state_ == State::LOCKED || current_state_ == State::PLANNING) {
-        final_out_pose.pose = locked_pose_; 
+      final_out_pose.header.frame_id = "base_link"; // 明确输出坐标系
+
+      if (current_state_ == State::LOCKED ||
+          current_state_ == State::PLANNING ||
+          current_state_ == State::EXECUTING)
+      {
+        final_out_pose.pose = locked_pose_;
       }
 
-      target_pose_pub_->publish(final_out_pose);
+      slot_pose_pub_->publish(final_out_pose);
+
+      geometry_msgs::msg::TransformStamped t;
+      t.header = final_out_pose.header;
+      t.header.frame_id = "base_link";
+      t.child_frame_id = "target_slot_fixed";
+      t.transform.translation.x = final_out_pose.pose.position.x;
+      t.transform.translation.y = final_out_pose.pose.position.y;
+      t.transform.translation.z = final_out_pose.pose.position.z;
+      t.transform.rotation = final_out_pose.pose.orientation;
+
+      tf_broadcaster_->sendTransform(t);
 
       if (debug_) {
         publishMarkers(final_out_pose.pose, final_out_pose.header);
         detector_->drawResults(img);
-        
-        geometry_msgs::msg::TransformStamped t;
-        t.header = final_out_pose.header;
-        t.child_frame_id = "target_slot_fixed";
-        t.transform.translation.x = final_out_pose.pose.position.x;
-        t.transform.translation.y = final_out_pose.pose.position.y;
-        t.transform.translation.z = final_out_pose.pose.position.z;
-        t.transform.rotation = final_out_pose.pose.orientation;
-        tf_broadcaster_->sendTransform(t);
       }
+
     } catch (const tf2::TransformException & ex) {
       RCLCPP_ERROR(get_logger(), "TF Transform failed: %s", ex.what());
     }
-  } else {
-    // 5. 丢失处理 (Lost Buffer)
-    if (current_state_ != State::PLANNING && current_state_ != State::LOST) {
+
+  } 
+  else {
+
+    // 5. 丢失处理
+    // EXECUTING / PLANNING 不允许自动 LOST，必须等外部命令切回 LOST
+    if (current_state_ != State::PLANNING &&
+        current_state_ != State::EXECUTING &&
+        current_state_ != State::LOST)
+    {
       lost_frames_counter_++;
+
       if (lost_frames_counter_ > lost_buffer_limit_) {
         current_state_ = State::LOST;
         stable_frames_ = 0;
-        RCLCPP_WARN(this->get_logger(), "Target lost for %d frames, resetting state.", lost_buffer_limit_);
+        RCLCPP_WARN(this->get_logger(),
+                    "Target lost for %d frames, resetting state.",
+                    lost_buffer_limit_);
       }
     }
   }
 
   // 6. 状态显示
   if (debug_) {
-    std::string state_str[] = {"LOST", "TRACKING", "LOCKED", "PLANNING"};
+
+    std::string state_str[] =
+    {"LOST", "TRACKING", "LOCKED", "PLANNING", "EXECUTING"};
+
     std::stringstream ss;
-    ss << "State: " << state_str[(int)current_state_] << " | Latency: " << std::fixed << std::setprecision(2) << latency << "ms";
-    cv::Scalar color = (current_state_ == State::LOCKED) ? cv::Scalar(0, 255, 0) : cv::Scalar(0, 255, 255);
-    cv::putText(img, ss.str(), cv::Point(20, 40), cv::FONT_HERSHEY_SIMPLEX, 1.2, color, 2);
-    result_img_pub_.publish(cv_bridge::CvImage(img_msg->header, "rgb8", img).toImageMsg());
+    ss << "State: " << state_str[(int)current_state_]
+       << " | Latency: "
+       << std::fixed << std::setprecision(2)
+       << latency << "ms";
+
+    cv::Scalar color =
+        (current_state_ == State::LOCKED) ?
+        cv::Scalar(0, 255, 0) :
+        cv::Scalar(0, 255, 255);
+
+    cv::putText(img, ss.str(), cv::Point(20, 40),
+                cv::FONT_HERSHEY_SIMPLEX, 1.2, color, 2);
+
+    result_img_pub_.publish(
+        cv_bridge::CvImage(img_msg->header, "rgb8", img).toImageMsg());
   }
 }
 
@@ -243,25 +301,25 @@ bool ExchangeSlotDetectorNode::isStable(const geometry_msgs::msg::Pose & p1, con
   return angle_diff < ori_tolerance_;
 }
 
-void ExchangeSlotDetectorNode::handleLockService(
-  const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-  std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+void ExchangeSlotDetectorNode::getStateCb(
+  const std::shared_ptr<GetDetectorState::Request> request,
+  std::shared_ptr<GetDetectorState::Response> response)
 {
-  if (request->data) {
-    if (current_state_ == State::LOCKED) {
-      current_state_ = State::PLANNING;
-      response->success = true;
-      response->message = "Detector locked in PLANNING state.";
-    } else {
-      response->success = false;
-      response->message = "Cannot lock: No target currently locked.";
-    }
-  } else {
-    current_state_ = State::LOST;
-    response->success = true;
-    response->message = "Detector reset to LOST state.";
-  }
+  (void)request;
+  response->state = static_cast<uint8_t>(current_state_);
 }
+void ExchangeSlotDetectorNode::setStateCb(
+  const std::shared_ptr<SetDetectorState::Request> request,
+  std::shared_ptr<SetDetectorState::Response> response)
+{
+  current_state_ = static_cast<State>(request->state);
+
+  RCLCPP_INFO(this->get_logger(),
+              "State changed to %d", request->state);
+
+  response->success = true;
+}
+
 }
 #include "rclcpp_components/register_node_macro.hpp"
 RCLCPP_COMPONENTS_REGISTER_NODE(exchange_slot::ExchangeSlotDetectorNode)

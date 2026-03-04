@@ -1,11 +1,9 @@
 # MoveIt 使用 SimpleControllerManager 来管理控制器
 moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
 
-# trajectory_execution:
-#   allowed_execution_duration_scaling: 1.2
-#   allowed_goal_duration_margin: 0.5
-#   allowed_start_tolerance: 0.01
-#   trajectory_duration_monitoring: true
+trajectory_execution:
+  allowed_execution_duration_scaling: 10.0 # 允许执行时间 = 规划时间 × 10
+  allowed_goal_duration_margin: 5.0        # 额外允许的时间缓冲
 
 # 将控制器配置嵌套在插件定义的命名空间下
 moveit_simple_controller_manager:

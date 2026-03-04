@@ -5,7 +5,8 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
-#include <std_srvs/srv/set_bool.hpp>
+#include <std_msgs/msg/detail/u_int8__struct.hpp>
+#include <std_msgs/msg/u_int8.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 #include <tf2_ros/transform_broadcaster.h>
@@ -13,10 +14,13 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "detector/detector.hpp"
-
+#include "detector_interfaces/srv/get_detector_state.hpp"
+#include "detector_interfaces/srv/set_detector_state.hpp"
+using GetDetectorState = detector_interfaces::srv::GetDetectorState;
+using SetDetectorState = detector_interfaces::srv::SetDetectorState;
 namespace exchange_slot
 {
-enum class State { LOST, TRACKING, LOCKED, PLANNING };
+enum class State { LOST, TRACKING, LOCKED, PLANNING, EXECUTING };
 
 class ExchangeSlotDetectorNode : public rclcpp::Node
 {
@@ -36,17 +40,24 @@ private:
   std::unique_ptr<ExchangeSlotDetector> detector_;
 
   // 发布者与订阅者
-  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr target_pose_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr slot_pose_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
   std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_sub_;
   rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr img_sub_;
+  
   // 服务通信
-  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr lock_service_;
-  void handleLockService(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-                        std::shared_ptr<std_srvs::srv::SetBool::Response> response);
+  rclcpp::Service<GetDetectorState>::SharedPtr get_state_srv_;
+  rclcpp::Service<SetDetectorState>::SharedPtr set_state_srv_;
+  void getStateCb(
+  const std::shared_ptr<GetDetectorState::Request> request,
+  std::shared_ptr<GetDetectorState::Response> response);
+  void setStateCb(
+  const std::shared_ptr<SetDetectorState::Request> request,
+  std::shared_ptr<SetDetectorState::Response> response);
+
   // 参数
   bool debug_;
   bool no_hardware_;
@@ -67,6 +78,9 @@ private:
   geometry_msgs::msg::Pose locked_pose_;
   int stable_frames_ = 0;   // 稳定计数
   int lost_frames_counter_ = 0; // 丢失缓冲计数
+
+// 实验用
+  // bool force_fixed_pose_;
 };
 } 
 

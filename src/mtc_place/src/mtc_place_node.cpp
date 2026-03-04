@@ -1,276 +1,378 @@
-#include "rclcpp/rclcpp.hpp"
-#include <memory>
-#include <moveit/planning_scene/planning_scene.h>
-#include <moveit/planning_scene_interface/planning_scene_interface.h>
-#include <moveit/task_constructor/container.h>
-#include <moveit/task_constructor/stage.h>
-#include <moveit/task_constructor/stages/move_relative.h>
-#include <moveit/task_constructor/task.h>
-#include <moveit/task_constructor/solvers.h>
-#include <moveit/task_constructor/stages.h>
-
-#if __has_include(<tf2_geometry_msgs/tf2_geometry_msgs.hpp>)
+#include "mtc_place/mtc_place_node.hpp"
+#include <geometry_msgs/msg/detail/pose_stamped__struct.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#else
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#endif
-#if __has_include(<tf2_eigen/tf2_eigen.hpp>)
-#include <tf2_eigen/tf2_eigen.hpp>
-#else
-#include <tf2_eigen/tf2_eigen.h>
-#endif
 
-static const rclcpp::Logger LOGGER = rclcpp::get_logger("mtc_tutorial");
-namespace mtc = moveit::task_constructor;
-
-class MTCTaskNode
+namespace mtc_place
 {
-public:
-  MTCTaskNode(const rclcpp::NodeOptions& options);
-  rclcpp::node_interfaces::NodeBaseInterface::SharedPtr getNodeBaseInterface();
-  void doTask();
-  void setupPlanningScene();
-
-private:
-  mtc::Task createTask();
-  mtc::Task task_;
-  rclcpp::Node::SharedPtr node_;
-};
 
 MTCTaskNode::MTCTaskNode(const rclcpp::NodeOptions& options)
-  : node_{ std::make_shared<rclcpp::Node>("mtc_node", options) }
 {
+  /* ---------- node ---------- */
+  node_ = std::make_shared<rclcpp::Node>("mtc_place_node", options);
+
+  /* ---------- parameters ---------- */
+  node_->declare_parameter("arm_group", "main");
+  node_->declare_parameter("hand_frame", "vacuum_tcp");
+
+  arm_group_  = node_->get_parameter("arm_group").as_string();
+  hand_frame_ = node_->get_parameter("hand_frame").as_string();
+
+  /* ---------- interfaces ---------- */
+  slot_pose_sub_ =
+    node_->create_subscription<geometry_msgs::msg::PoseStamped>(
+      "/exchange_slot/slot_pose", 10,
+      std::bind(&MTCTaskNode::slotPoseCallback, this, std::placeholders::_1));
+  get_state_client_ =
+    node_->create_client<GetDetectorState>("/detector/get_state");
+
+  set_state_client_ =
+    node_->create_client<SetDetectorState>("/detector/set_state");
+  RCLCPP_INFO(node_->get_logger(), "MTCTaskNode constructed");
+  task_timer_ = node_->create_wall_timer(
+    std::chrono::milliseconds(300),
+  std::bind(&MTCTaskNode::doTask, this));
+}
+/* ===================== planning scene ===================== */
+
+void MTCTaskNode::setupPlanningScene(const geometry_msgs::msg::PoseStamped &slot_pose_stamped)
+{
+    moveit::planning_interface::PlanningSceneInterface psi;
+
+    double square_size = 0.10;
+    double base_height = 0.01;
+    double cylinder_height = 0.10;
+    double cylinder_radius = 0.018;
+
+    // ---------- 确认 slot_pose_stamped 已经在 base_link 下 ----------
+    geometry_msgs::msg::PoseStamped slot_pose = slot_pose_stamped;
+    slot_pose.header.frame_id = "base_link"; // 强制 frame_id 为 base_link
+
+    // ---------- 1. 底座碰撞体 ----------
+    moveit_msgs::msg::CollisionObject base;
+    base.id = "slot_base";
+    base.header.frame_id = "base_link";
+    base.primitives.resize(1);
+    base.primitives[0].type = shape_msgs::msg::SolidPrimitive::BOX;
+    base.primitives[0].dimensions = {square_size, square_size, base_height};
+    base.pose = slot_pose.pose;
+    base.operation = base.ADD;
+    psi.applyCollisionObject(base);
+
+    // ---------- 2. 圆柱碰撞体 ----------
+    moveit_msgs::msg::CollisionObject cylinder;
+    cylinder.id = "slot_cylinder";
+    cylinder.header.frame_id = "base_link";
+    cylinder.primitives.resize(1);
+    cylinder.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
+    cylinder.primitives[0].dimensions = {cylinder_height, cylinder_radius};
+
+    // 使用 tf2::Transform 计算圆柱相对于底座的偏移
+    tf2::Transform tf_base, tf_offset, tf_cylinder;
+    tf2::fromMsg(slot_pose.pose, tf_base); // 底座位姿
+    tf_offset.setIdentity();
+    tf_offset.setOrigin(tf2::Vector3(0, 0, base_height / 2.0 + cylinder_height / 2.0)); // z 偏移
+    tf_cylinder = tf_base * tf_offset; // 底座+偏移
+
+    cylinder.pose = tfToPose(tf_cylinder);
+    cylinder.operation = cylinder.ADD;
+    psi.applyCollisionObject(cylinder);
+
+    // ---------- 3. 附着 hollow_cylinder ----------
+    moveit_msgs::msg::CollisionObject hollow;
+    hollow.id = "hollow_cylinder";
+    hollow.header.frame_id = hand_frame_;
+    hollow.primitives.resize(1);
+    hollow.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
+    hollow.primitives[0].dimensions = {0.15, 0.0475};
+
+    // hollow_cylinder 相对于手爪中心
+    tf2::Transform tf_hollow;
+    tf_hollow.setOrigin(tf2::Vector3(0, 0, 0.15 / 2.0));
+    tf2::Quaternion q;
+    q.setRPY(M_PI / 2, 0, 0);
+    tf_hollow.setRotation(q);
+
+    hollow.pose = tfToPose(tf_hollow); 
+    hollow.operation = hollow.ADD;
+
+    // 附着
+    moveit_msgs::msg::AttachedCollisionObject attached;
+    attached.object = hollow;
+    attached.link_name = hand_frame_;
+    attached.touch_links = {hand_frame_}; // 与手爪允许接触
+    psi.applyAttachedCollisionObject(attached);
 }
 
-rclcpp::node_interfaces::NodeBaseInterface::SharedPtr MTCTaskNode::getNodeBaseInterface()
+/* ===================== executor interface ===================== */
+
+rclcpp::node_interfaces::NodeBaseInterface::SharedPtr
+MTCTaskNode::getNodeBaseInterface()
 {
   return node_->get_node_base_interface();
 }
 
-// 相对于 TCP 放置物体
-void MTCTaskNode::setupPlanningScene()
+/* ===================== callbacks ===================== */
+
+void MTCTaskNode::slotPoseCallback(
+  const geometry_msgs::msg::PoseStamped::SharedPtr msg)
 {
-  moveit_msgs::msg::CollisionObject object;
-  object.id = "object";
-  object.header.frame_id = "vacuum_tcp"; // 直接相对于吸盘 TCP
-  object.primitives.resize(1);
-  object.primitives[0].type = shape_msgs::msg::SolidPrimitive::BOX;
-  object.primitives[0].dimensions = { 0.02, 0.02, 0.02 }; // 正方体
+  latest_slot_pose_ = *msg;
 
-  geometry_msgs::msg::Pose pose;
-  pose.position.x = 0.09;
-  pose.position.y = 0.0;
-  pose.position.z = -0.03; // 放在吸盘正前方
-  pose.orientation.w = 1.0;
-  object.pose = pose;
-
-  moveit::planning_interface::PlanningSceneInterface psi;
-  // 注意：在实际运行中，如果 vacuum_tcp 还未在 TF 树中出现，这里可能会警告
-  psi.applyCollisionObject(object);
+  RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,"Received slot pose");
 }
 
-void MTCTaskNode::doTask()
+/* ===================== main task entry ===================== */
+void MTCTaskNode::handleGetStateResponse(
+  rclcpp::Client<GetDetectorState>::SharedFuture future)
 {
-  task_ = createTask();
+  uint8_t state = future.get()->state;
+
+  if (state != static_cast<uint8_t>(State::LOCKED))
+    return;
+
+  startPlanningPipeline();
+  // RCLCPP_INFO(node_->get_logger(), "Got detector state response");
+}
+void MTCTaskNode::startPlanningPipeline()
+{
+  if (task_running_) return;
+  task_running_ = true;
+
+  RCLCPP_INFO(node_->get_logger(), "Start PLANNING");
+
+  setDetectorState(static_cast<uint8_t>(State::PLANNING));
+
+  setupPlanningScene(latest_slot_pose_);
+  task_ = createTestTask();
+  task_.enableIntrospection();
+
   try {
     task_.init();
-  } catch (mtc::InitStageException& e) {
-    RCLCPP_ERROR_STREAM(LOGGER, e);
+  } catch (...) {
+    task_running_ = false;
+    setDetectorState(static_cast<uint8_t>(State::LOCKED));
     return;
   }
 
   if (!task_.plan(5)) {
-    RCLCPP_ERROR_STREAM(LOGGER, "任务规划失败");
+    task_running_ = false;
+    setDetectorState(static_cast<uint8_t>(State::LOCKED));
     return;
   }
 
-  task_.introspection().publishSolution(*task_.solutions().front());
-  
-  auto result = task_.execute(*task_.solutions().front());
-  if (result.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS) {
-    RCLCPP_ERROR_STREAM(LOGGER, "任务执行失败");
-    return;
-  }
+  auto solution = task_.solutions().front();
+  task_.introspection().publishSolution(*solution);
+
+  setDetectorState(static_cast<uint8_t>(State::EXECUTING));
+
+  auto result = task_.execute(*solution);
+
+  if (result.val == moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
+    setDetectorState(static_cast<uint8_t>(State::LOST));
+  else
+    setDetectorState(static_cast<uint8_t>(State::LOCKED));
+
+  task_running_ = false;
+}
+void MTCTaskNode::doTask()
+{
+  if (task_running_) return;
+  auto req = std::make_shared<GetDetectorState::Request>();
+  get_state_client_->async_send_request(
+    req,
+    std::bind(&MTCTaskNode::handleGetStateResponse, this, std::placeholders::_1)
+  );
 }
 
-mtc::Task MTCTaskNode::createTask()
+
+
+/* ===================== MTC ===================== */
+
+moveit::task_constructor::Task MTCTaskNode::createTask()
 {
-  mtc::Task task;
-  task.stages()->setName("Vacuum Attach Test");
+  moveit::task_constructor::Task task;
+  task.stages()->setName("place_hollow_cylinder");
+
   task.loadRobotModel(node_);
+  task.setProperty("group", arm_group_);
+  task.setProperty("ik_frame", hand_frame_);
 
-  const auto& arm_group_name = "main";
-  const auto& hand_group_name = "hand"; 
-  const auto& hand_frame = "vacuum_tcp";
+  auto pipeline = std::make_shared<moveit::task_constructor::solvers::PipelinePlanner>(node_);
+  auto cartesian = std::make_shared<moveit::task_constructor::solvers::CartesianPath>();
+  cartesian->setStepSize(0.003);
+  cartesian->setMaxVelocityScalingFactor(0.2);
+  cartesian->setMaxAccelerationScalingFactor(0.2);
 
-  // 设置全局属性
-  task.setProperty("group", arm_group_name);
-  task.setProperty("eef", hand_group_name);
-  task.setProperty("ik_frame", hand_frame);
+  moveit::task_constructor::Stage* current_state = nullptr;
+  {
+    auto cs = std::make_unique<moveit::task_constructor::stages::CurrentState>("current");
+    current_state = cs.get();
+    task.add(std::move(cs));
+  }
 
-  // 1. 获取当前状态
-  auto stage_state_current = std::make_unique<mtc::stages::CurrentState>("current");
-  auto* current_state_ptr = stage_state_current.get();
-  task.add(std::move(stage_state_current));
+  // ---------- Connect ----------
+  {
+    auto connect = std::make_unique<moveit::task_constructor::stages::Connect>(
+        "connect", moveit::task_constructor::stages::Connect::GroupPlannerVector{
+          {arm_group_, pipeline}});
+    connect->setTimeout(5.0);
+    task.add(std::move(connect));
+  }
 
-  // 定义规划器
-  auto sampling_planner = std::make_shared<mtc::solvers::PipelinePlanner>(node_);
-  auto cartesian_planner = std::make_shared<mtc::solvers::CartesianPath>();
-  cartesian_planner->setMaxVelocityScalingFactor(0.5);
-  cartesian_planner->setStepSize(0.003);
+  // ---------- Place ----------
+  {
+    auto place = std::make_unique<moveit::task_constructor::SerialContainer>("place");
+    task.properties().exposeTo(place->properties(), {"group", "ik_frame"});
 
-  // 2. 自由移动到靠近物体的预备位 (Connect)
-  // 这步会自动规划从当前位置到“接近阶段”起始点的路径
-  auto stage_move_to_pick = std::make_unique<mtc::stages::Connect>(
-      "move to pick", mtc::stages::Connect::GroupPlannerVector{{arm_group_name, sampling_planner}});
-  stage_move_to_pick->setTimeout(5.0);
-  stage_move_to_pick->properties().configureInitFrom(mtc::Stage::PARENT);
-  task.add(std::move(stage_move_to_pick));
-
-    // 3. 抓取逻辑容器
+    // --- 1. 预放置姿态 ---
     {
-    auto grasp = std::make_unique<mtc::SerialContainer>("pick_logic");
-    task.properties().exposeTo(grasp->properties(), {"group", "eef", "ik_frame"});
-    grasp->properties().configureInitFrom(mtc::Stage::PARENT);
+      auto gen = std::make_unique<moveit::task_constructor::stages::GeneratePose>("generate_pre_place");
 
-    // 3.1 直接生成抓取位姿 (不再需要 MoveRelative)
-    {
-        auto stage = std::make_unique<mtc::stages::GeneratePose>("generate_pose");
-        stage->properties().configureInitFrom(mtc::Stage::PARENT);
-        stage->setMonitoredStage(current_state_ptr);
+      geometry_msgs::msg::PoseStamped pre_place = latest_slot_pose_;
+      pre_place.pose.position.z += 0.05 + 0.10/2.0 + 0.15/2.0; // 圆柱 + hollow偏移
+      gen->setPose(pre_place);
+      gen->setMonitoredStage(current_state);
 
-        geometry_msgs::msg::PoseStamped target_pose;
-        target_pose.header.frame_id = "object"; // 目标就是物体中心
-        target_pose.pose.orientation.w = 1.0;
-        stage->setPose(target_pose);
+      auto ik = std::make_unique<moveit::task_constructor::stages::ComputeIK>("pre_place_ik", std::move(gen));
+      ik->setIKFrame(hand_frame_);
+      ik->setMaxIKSolutions(16);
 
-        auto wrapper = std::make_unique<mtc::stages::ComputeIK>("pick_IK", std::move(stage));
-        wrapper->setIgnoreCollisions(true); // 调试用：忽略碰撞检查
-
-        wrapper->setMaxIKSolutions(20);
-        wrapper->setIKFrame(Eigen::Isometry3d::Identity(), hand_frame); 
-        wrapper->properties().configureInitFrom(mtc::Stage::PARENT, {"group", "eef"});
-        wrapper->properties().configureInitFrom(mtc::Stage::INTERFACE, {"target_pose"});
-        grasp->insert(std::move(wrapper));
-    }
-    
-    // 3.2 简单的吸附
-    {
-        auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>("attach_object");
-
-        stage->allowCollisions("object", "link7", true);
-        // stage->allowCollisions("link3","link_fo2",true);
-        stage->allowCollisions("object", arm_group_name, true); 
-        stage->attachObject("object", hand_frame);
-        grasp->insert(std::move(stage));
+      place->insert(std::move(ik));
     }
 
-    task.add(std::move(grasp));
+    // --- 2. 插入动作（沿 slot z 负方向） ---
+    {
+      auto insert = std::make_unique<moveit::task_constructor::stages::MoveRelative>("insert", cartesian);
+      insert->setIKFrame(hand_frame_);
+      insert->setMinMaxDistance(0.04, 0.06);
+
+      geometry_msgs::msg::Vector3Stamped dir;
+      dir.header.frame_id = latest_slot_pose_.header.frame_id;
+      dir.vector.z = -1.0;
+      insert->setDirection(dir);
+
+      // 碰撞控制
+      // 允许到达预放置姿态时 slot_base + slot_cylinder 碰撞
+      insert->properties().set("collision_objects", std::vector<std::string>{"slot_base"});
+      insert->properties().set("allowed_collision_objects", std::vector<std::string>{"slot_cylinder"});
+
+      place->insert(std::move(insert));
     }
-    // 4. 抬起物体 (Lift)
-//   // 抓取后先向上移动，避免在去放置点的路上撞到桌子
-//   {
-//     auto stage = std::make_unique<mtc::stages::MoveRelative>("lift_object", cartesian_planner);
-//     stage->properties().set("marker_ns", "lift");
-//     stage->properties().set("link", hand_frame);
-//     stage->setProperty("group", arm_group_name);
-//     stage->setMinMaxDistance(0.03, 0.05);
 
-//     geometry_msgs::msg::Vector3Stamped vec;
-//     vec.header.frame_id = "world"; // 沿世界坐标系 Z 轴向上
-//     vec.vector.z = 1.0;
-//     stage->setDirection(vec);
-//     task.add(std::move(stage));
-//   }
+    // --- 3. Detach hollow_cylinder ---
+    {
+      auto detach = std::make_unique<moveit::task_constructor::stages::ModifyPlanningScene>("detach_hollow");
+      detach->detachObject("hollow_cylinder", hand_frame_);
+      place->insert(std::move(detach));
+    }
 
-//   // 5. 移动到放置位置 (Connect)
-//   {
-//     auto stage = std::make_unique<mtc::stages::Connect>(
-//         "move to place", mtc::stages::Connect::GroupPlannerVector{{arm_group_name, sampling_planner}});
-//     stage->setTimeout(5.0);
-//     stage->properties().configureInitFrom(mtc::Stage::PARENT);
-//     task.add(std::move(stage));
-//   }
-
-// //   // 6. 放置逻辑容器
-//   {
-//     auto place = std::make_unique<mtc::SerialContainer>("place_logic");
-//     task.properties().exposeTo(place->properties(), {"group", "eef", "ik_frame"});
-//     place->properties().configureInitFrom(mtc::Stage::PARENT);
-
-//     // 6.1 生成放置位姿
-//     // 注意：放置点是相对于世界或参考帧的，这里我们模拟一个目标位置
-//     {
-//       auto stage = std::make_unique<mtc::stages::GeneratePose>("place_pose");
-//       stage->properties().configureInitFrom(mtc::Stage::PARENT);
-//       stage->setMonitoredStage(current_state_ptr);
-
-//       // 这里建议使用 "world" 作为参考，计算出放置的目标点
-//       geometry_msgs::msg::PoseStamped p;
-//       p.header.frame_id = "object"; 
-//       p.pose.position.x = 0.03;  // 示例值：请根据实际工作空间调整
-//       p.pose.position.y = 0.0; 
-//       p.pose.position.z = -0.02;
-//       p.pose.orientation.w = 1.0;
-//       stage->setPose(p);
-
-//       auto wrapper = std::make_unique<mtc::stages::ComputeIK>("place_IK", std::move(stage));
-//       wrapper->setMaxIKSolutions(20);
-//       wrapper->setIKFrame(Eigen::Isometry3d::Identity(), hand_frame);
-//       wrapper->properties().configureInitFrom(mtc::Stage::PARENT, {"group", "eef"});
-//       wrapper->properties().configureInitFrom(mtc::Stage::INTERFACE, {"target_pose"});
-//       place->insert(std::move(wrapper));
-//     }
-
-//     // 6.2 分离物体 (Detach)
-//     {
-//       auto stage = std::make_unique<mtc::stages::ModifyPlanningScene>("detach_object");
-//       stage->detachObject("object", hand_frame);
-//       place->insert(std::move(stage));
-//     }
-//     task.add(std::move(place));
-//   }
-
-//   // 7. 返回 Home 姿态 (所有关节设为 0)
-//   {
-//     auto stage = std::make_unique<mtc::stages::MoveTo>("return_home", sampling_planner);
-//     stage->setProperty("group", arm_group_name);
-    
-//     // 直接设置关节目标值
-//     std::map<std::string, double> home_joints;
-//     home_joints["joint1"] = 0.0;
-//     home_joints["joint2"] = 0.0;
-//     home_joints["joint3"] = 0.0;
-//     home_joints["joint4"] = 0.0;
-//     home_joints["joint5"] = 0.0;
-//     home_joints["joint6"] = 0.0;
-//     home_joints["joint7"] = 0.0;
-    
-//     stage->setGoal(home_joints);
-//     task.add(std::move(stage));
-//   }
+    task.add(std::move(place));
+  }
 
   return task;
 }
 
+
+
+/* ===================== detector lock ===================== */
+moveit::task_constructor::Task MTCTaskNode::createTestTask()
+{
+  using namespace moveit::task_constructor;
+
+  Task task;
+  task.stages()->setName("test_state_machine_task");
+
+  task.loadRobotModel(node_);
+  task.setProperty("group", arm_group_);
+
+  /* ---------- planner ---------- */
+  auto pipeline =
+    std::make_shared<solvers::PipelinePlanner>(node_);
+
+  /* ---------- Current State ---------- */
+  {
+    auto cs = std::make_unique<stages::CurrentState>("current");
+    task.add(std::move(cs));
+  }
+
+  /* ---------- joint1 -> 90 deg ---------- */
+  {
+    auto move = std::make_unique<stages::MoveTo>("joint1_90deg", pipeline);
+    move->setGroup(arm_group_);
+
+    std::map<std::string, double> target;
+    target["joint1"] = M_PI / 2.0;  // 90 deg
+    move->setGoal(target);
+
+    task.add(std::move(move));
+  }
+
+  /* ---------- detach hollow cylinder ---------- */
+  {
+    auto detach =
+      std::make_unique<stages::ModifyPlanningScene>("detach_hollow");
+
+    detach->detachObject("hollow_cylinder", hand_frame_);
+    task.add(std::move(detach));
+  }
+
+  /* ---------- back to home ---------- */
+  {
+    auto home = std::make_unique<stages::MoveTo>("go_home", pipeline);
+    home->setGroup(arm_group_);
+
+    std::map<std::string, double> home_pose;
+    home_pose["joint1"] = 0.0;
+    home_pose["joint2"] = 0.0;
+    home_pose["joint3"] = 0.0;
+    home_pose["joint4"] = 0.0;
+    home_pose["joint5"] = 0.0;
+    home_pose["joint6"] = 0.0;
+    home_pose["joint7"] = 0.0;
+
+    home->setGoal(home_pose);
+    task.add(std::move(home));
+  }
+
+  return task;
+}
+
+geometry_msgs::msg::Pose tfToPose(const tf2::Transform &tf)
+{
+    geometry_msgs::msg::Pose pose;
+    pose.position.x = tf.getOrigin().x();
+    pose.position.y = tf.getOrigin().y();
+    pose.position.z = tf.getOrigin().z();
+    tf2::Quaternion q = tf.getRotation();
+    pose.orientation = tf2::toMsg(q);
+    return pose;
+}
+void MTCTaskNode::setDetectorState(uint8_t state)
+{
+  auto req = std::make_shared<SetDetectorState::Request>();
+  req->state = state;
+  set_state_client_->async_send_request(req);
+}
+}  // namespace mtc_place
+
+
+#include "mtc_place/mtc_place_node.hpp"
+#include <rclcpp/rclcpp.hpp>
+#include <thread>
+#include <chrono>
+
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
+
   rclcpp::NodeOptions options;
-  options.automatically_declare_parameters_from_overrides(true);
-  
-  auto mtc_task_node = std::make_shared<MTCTaskNode>(options);
+  auto mtc_node = std::make_shared<mtc_place::MTCTaskNode>(options);
+
   rclcpp::executors::MultiThreadedExecutor executor;
-  
-  auto spin_thread = std::make_unique<std::thread>([&executor, &mtc_task_node]() {
-    executor.add_node(mtc_task_node->getNodeBaseInterface());
-    executor.spin();
-  });
+  executor.add_node(mtc_node->getNodeBaseInterface());
 
-  mtc_task_node->setupPlanningScene();
-  mtc_task_node->doTask();
+  executor.spin();   // 一直运行
 
-  spin_thread->join();
   rclcpp::shutdown();
   return 0;
 }
