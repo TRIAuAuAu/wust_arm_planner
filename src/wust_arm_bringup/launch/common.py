@@ -17,9 +17,9 @@ node_params = os.path.join(
 
 # 统一 MoveIt 配置加载
 moveit_config = (
-    MoveItConfigsBuilder("wust_arm_7axis")
-    .robot_description(file_path="config/wust_arm_7axis_description.urdf.xacro")
-    .robot_description_semantic(file_path="config/wust_arm_7axis_description.srdf")
+    MoveItConfigsBuilder("wust_seven_axis_arm")
+    .robot_description(file_path="config/wust_seven_axis_arm_description.urdf.xacro")
+    .robot_description_semantic(file_path="config/wust_seven_axis_arm_description.srdf")
     .planning_scene_monitor(publish_robot_description=True, publish_robot_description_semantic=True)
     .joint_limits(file_path="config/joint_limits.yaml")
     .trajectory_execution(file_path="config/moveit_controllers.yaml")
@@ -62,7 +62,7 @@ mtc_place_node = Node(
 
 #  RViz
 rviz_config = PathJoinSubstitution(
-    [FindPackageShare("wust_arm_7axis_moveit_config"), "launch", LaunchConfiguration("rviz_config")]
+    [FindPackageShare("wust_seven_axis_arm_moveit_config"), "launch", LaunchConfiguration("rviz_config")]
 )
 rviz_node = Node(
     package="rviz2",

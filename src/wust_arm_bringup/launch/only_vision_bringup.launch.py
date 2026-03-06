@@ -59,15 +59,21 @@ def generate_launch_description():
     )
 
     # 5. (可选) 静态 TF 发布器
-    static_tf_node = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='static_tf_pub_world_to_camera',
-        arguments=['0', '0', '0', '0', '0', '0', '1', 'world', 'camera_optical_frame']
+    static_tf = Node(
+        package="tf2_ros",
+        executable="static_transform_publisher",
+        arguments=["0", "0", "0", "0", "0", "0", "world", "base_link"],
+    )
+    robot_state_publisher = Node(
+        package="robot_state_publisher",
+        executable="robot_state_publisher",
+        output="both",
+        parameters=[moveit_config.robot_description],
     )
 
-
-    return LaunchDescription([container,
-                             rviz_node,
-                             static_tf_node,
-                             ])
+    return LaunchDescription([
+            static_tf,
+            container,
+            rviz_node,
+            robot_state_publisher
+            ])

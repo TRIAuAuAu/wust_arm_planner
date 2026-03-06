@@ -16,9 +16,9 @@ def generate_launch_description():
     from common import launch_params,node_params,detector_container,mtc_place_node
     # ========== MoveIt Config ==========
     moveit_config = (
-        MoveItConfigsBuilder("wust_arm_7axis")
-        .robot_description(file_path="config/wust_arm_7axis_description.urdf.xacro")
-        .robot_description_semantic(file_path="config/wust_arm_7axis_description.srdf")
+        MoveItConfigsBuilder("wust_seven_axis_arm")
+        .robot_description(file_path="config/wust_seven_axis_arm_description.urdf.xacro")
+        .robot_description_semantic(file_path="config/wust_seven_axis_arm_description.srdf")
         .robot_description_kinematics(file_path="config/kinematics.yaml")
         .joint_limits(file_path="config/joint_limits.yaml")
         .trajectory_execution(file_path="config/moveit_controllers.yaml")
@@ -50,7 +50,7 @@ def generate_launch_description():
     
     # ========== RViz ==========
     rviz_config = PathJoinSubstitution(
-        [FindPackageShare("wust_arm_7axis_moveit_config"), "launch", "moveit.rviz"]
+        [FindPackageShare("wust_seven_axis_arm_description"), "launch", "moveit.rviz"]
     )
 
     rviz_node = Node(

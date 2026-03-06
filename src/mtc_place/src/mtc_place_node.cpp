@@ -12,7 +12,7 @@ MTCTaskNode::MTCTaskNode(const rclcpp::NodeOptions& options)
 
   /* ---------- parameters ---------- */
   node_->declare_parameter("arm_group", "main");
-  node_->declare_parameter("hand_frame", "vacuum_tcp");
+  node_->declare_parameter("hand_frame", "LINK_TCP");
 
   arm_group_  = node_->get_parameter("arm_group").as_string();
   hand_frame_ = node_->get_parameter("hand_frame").as_string();
@@ -66,7 +66,7 @@ void MTCTaskNode::setupPlanningScene(const geometry_msgs::msg::PoseStamped &slot
     cylinder.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
     cylinder.primitives[0].dimensions = {cylinder_height, cylinder_radius};
 
-    // 使用 tf2::Transform 计算圆柱相对于底座的偏移
+    // 使用 tf2::Transform 计算圆柱相对于底座的偏移，避免坐标系偏移导致的误差
     tf2::Transform tf_base, tf_offset, tf_cylinder;
     tf2::fromMsg(slot_pose.pose, tf_base); // 底座位姿
     tf_offset.setIdentity();
@@ -80,16 +80,24 @@ void MTCTaskNode::setupPlanningScene(const geometry_msgs::msg::PoseStamped &slot
     // ---------- 3. 附着 hollow_cylinder ----------
     moveit_msgs::msg::CollisionObject hollow;
     hollow.id = "hollow_cylinder";
-    hollow.header.frame_id = hand_frame_;
+    hollow.header.frame_id = hand_frame_; 
+    
     hollow.primitives.resize(1);
     hollow.primitives[0].type = shape_msgs::msg::SolidPrimitive::CYLINDER;
-    hollow.primitives[0].dimensions = {0.15, 0.0475};
+    // dimensions = {高度, 半径}
+    double h = 0.15;
+    double r = 0.0475;
+    hollow.primitives[0].dimensions = {h, r};
 
-    // hollow_cylinder 相对于手爪中心
     tf2::Transform tf_hollow;
-    tf_hollow.setOrigin(tf2::Vector3(0, 0, 0.15 / 2.0));
+    
+    // 圆柱中心在吸盘前方“一个半径”的距离
+    tf_hollow.setOrigin(tf2::Vector3(0, 0, r)); 
+
+    // 让圆柱的长轴（原本是Z）转到坐标系的 Y 轴方向
     tf2::Quaternion q;
-    q.setRPY(M_PI / 2, 0, 0);
+    // Roll=PI/2, Pitch=0, Yaw=0 
+    q.setRPY(M_PI / 2.0, 0, 0); 
     tf_hollow.setRotation(q);
 
     hollow.pose = tfToPose(tf_hollow); 

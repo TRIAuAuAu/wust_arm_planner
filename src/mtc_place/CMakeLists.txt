@@ -44,10 +44,8 @@ ament_target_dependencies(mtc_place_node
 
 # 3. 安装
 install(
-  TARGETS mtc_place_node
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION lib
+  TARGETS mtc_place_node 
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 install(
