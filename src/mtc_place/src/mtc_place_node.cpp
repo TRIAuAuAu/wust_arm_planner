@@ -45,6 +45,11 @@ MTCTaskNode::MTCTaskNode(const rclcpp::NodeOptions& options)
 void MTCTaskNode::setupPlanningScene(const geometry_msgs::msg::PoseStamped &slot_pose_stamped)
 {
     moveit::planning_interface::PlanningSceneInterface psi;
+    // 对于hollow_cylinder，先detach再remove
+    moveit_msgs::msg::AttachedCollisionObject detach;
+    detach.object.id = "hollow_cylinder";
+    detach.object.operation = detach.object.REMOVE;
+    psi.applyAttachedCollisionObject(detach);
     // 清理场景
     psi.removeCollisionObjects({"slot_base", "slot_cylinder", "hollow_cylinder"});
     // ---------- 确认 slot_pose_stamped 已经在 base_link 下 ----------
@@ -156,7 +161,7 @@ void MTCTaskNode::slotPoseCallback(
 {
   latest_slot_pose_ = *msg;
 
-  RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 2000,"Received slot pose");
+  RCLCPP_DEBUG(node_->get_logger(), "Received slot pose");
 }
 
 /* ===================== main task entry ===================== */
@@ -315,22 +320,17 @@ moveit::task_constructor::Task MTCTaskNode::createTask()
 
     // 3.2 插入时允许碰撞
     {
-      auto allow = std::make_unique<stages::ModifyPlanningScene>(
-          "allow_collision_for_insert");
-
-      allow->allowCollisions(
-          "hollow_cylinder",
-          {"slot_cylinder","slot_base"},
-          true);
-
-      place->insert(std::move(allow));
+      auto allow_collision = std::make_unique<stages::ModifyPlanningScene>("allow_collision_for_insert");
+        std::vector<std::string> slot_objects = {"slot_cylinder", "slot_base"};
+      allow_collision->allowCollisions("hollow_cylinder",slot_objects,true);
+      place->insert(std::move(allow_collision));
     }
 
     // 3.3 笛卡尔坐标直线插入
     {
       auto insert = std::make_unique<stages::MoveRelative>("linear_insert", cartesian);
       insert->properties().configureInitFrom(Stage::PARENT, {"group"});
-      insert->setIKFrame(hand_frame_);
+      insert->setIKFrame("hollow_cylinder");
       
       // 关键：在对齐之后，hollow_cylinder 的 Z 轴正向现在正对着插槽深处
       geometry_msgs::msg::Vector3Stamped dir;
@@ -347,6 +347,13 @@ moveit::task_constructor::Task MTCTaskNode::createTask()
       auto detach = std::make_unique<stages::ModifyPlanningScene>("detach_object");
       detach->detachObject("hollow_cylinder", hand_frame_);
       place->insert(std::move(detach));
+    }
+    // 3.5 禁止碰撞
+    {
+      auto forbid_collision = std::make_unique<stages::ModifyPlanningScene>("forbid_collision_after_place");
+      std::vector<std::string> gripper_links = {"LINK7", hand_frame_};
+      forbid_collision->allowCollisions("hollow_cylinder", gripper_links, false);
+      place->insert(std::move(forbid_collision));
     }
     task.add(std::move(place));
   }

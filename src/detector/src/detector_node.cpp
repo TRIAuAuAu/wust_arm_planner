@@ -135,9 +135,9 @@ void ExchangeSlotDetectorNode::imageCallback(
       pose_in_world.header.frame_id = "base_link";
 
       // 缩放修正 (实验调参)
-      // pose_in_world.pose.position.x *= 0.85;
-      // pose_in_world.pose.position.y *= 0.7;
-      // pose_in_world.pose.position.z *= 1.1;
+      pose_in_world.pose.position.x *= 1.1;
+      pose_in_world.pose.position.y *= 1.1;
+      pose_in_world.pose.position.z *= 1.0;
 
       // 3. 状态机逻辑
       if (current_state_ == State::LOST) {
