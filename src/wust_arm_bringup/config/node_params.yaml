@@ -67,11 +67,11 @@ exchange_slot_detector:
  
     # 全局通用参数 (无论仿真还是实物均会使用)
 
-    joint_names: ["JOINT1", "JOINT2", "JOINT3", "JOINT4", "JOINT5", "JOINT6", "JOINT7"]
+    joint_names: ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"]
 
     controller_freq: 50           # [全局] 发送指令的频率 (Hz)。
                                   # 仿真时：目标点更新频率；实物时：串口发包频率
-    state_publish_rate: 50.0      # [全局] 发布 /JOINT_states 话题的频率 (Hz)
+    state_publish_rate: 50.0      # [全局] 发布 /joint_states 话题的频率 (Hz)
                                   # 建议与 MoveIt 规划频率保持一致 (一般 50-100Hz)
     
     # 任务成功依据 (Action Server 科学判断标准)

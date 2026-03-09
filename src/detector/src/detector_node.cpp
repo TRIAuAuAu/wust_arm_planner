@@ -188,7 +188,6 @@ void ExchangeSlotDetectorNode::imageCallback(
       t.transform.translation.y = final_out_pose.pose.position.y;
       t.transform.translation.z = final_out_pose.pose.position.z;
       t.transform.rotation = final_out_pose.pose.orientation;
-
       tf_broadcaster_->sendTransform(t);
 
       if (debug_) {
