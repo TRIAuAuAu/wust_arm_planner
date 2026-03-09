@@ -314,8 +314,11 @@ void ExchangeSlotDetectorNode::setStateCb(
 {
   current_state_ = static_cast<State>(request->state);
 
-  RCLCPP_INFO(this->get_logger(),
-              "State changed to %d", request->state);
+  // 定义状态名称映射
+  std::string state_names[] = {"LOST", "TRACKING", "LOCKED", "PLANNING", "EXECUTING"};
+  std::string current_name = (request->state < 5) ? state_names[request->state] : "UNKNOWN";
+
+  RCLCPP_INFO(this->get_logger(), "State changed to: %s", current_name.c_str());
 
   response->success = true;
 }

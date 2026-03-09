@@ -13,8 +13,10 @@
 #include <moveit/task_constructor/task.h>
 #include <moveit/task_constructor/solvers.h>
 #include <moveit/task_constructor/stages.h>
+#include <moveit_msgs//srv/get_planning_scene.hpp>
 #include "detector_interfaces/srv/get_detector_state.hpp"
 #include "detector_interfaces/srv/set_detector_state.hpp"
+
 using GetDetectorState = detector_interfaces::srv::GetDetectorState;
 using SetDetectorState = detector_interfaces::srv::SetDetectorState;
 
@@ -58,6 +60,9 @@ private:
   rclcpp::TimerBase::SharedPtr task_timer_;
   void handleGetStateResponse(rclcpp::Client<GetDetectorState>::SharedFuture future);
   void startPlanningPipeline();
+  // 互斥回调组
+  rclcpp::CallbackGroup::SharedPtr cb_group_service_;
+  rclcpp::CallbackGroup::SharedPtr cb_group_timer_;
 
   geometry_msgs::msg::PoseStamped latest_slot_pose_;
   bool task_running_ = false;
