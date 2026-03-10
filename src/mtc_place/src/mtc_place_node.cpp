@@ -296,36 +296,41 @@ moveit::task_constructor::Task MTCTaskNode::createTask()
 
       // yaw sampling 参数
       int n_yaw = 5;                  // 备选yaw 个数
-      double yaw_range = M_PI / 6;    // 备选yaw 范围
-
+      double yaw_range = M_PI / 2;    // 备选yaw 范围
+      tf2::Transform hollow_T_tcp = T_tcp_hollow_.inverse();
       for(int i = 0; i < n_yaw; ++i)
       {
-        double yaw = -yaw_range + i * (2 * yaw_range) / (n_yaw - 1);
-
-        // 生成新的 TCP pose
-        tf2::Transform T = base_T_tcp;
-        tf2::Quaternion q = T.getRotation();
-        tf2::Quaternion q_yaw;
-        q_yaw.setRPY(0,0,yaw); // 绕Z轴旋转
-        T.setRotation(q_yaw * q);
-
+        double yaw = -yaw_range + i * (2*yaw_range)/(n_yaw-1);
+        // hollow yaw rotation
+        tf2::Transform hollow_rot;
+        hollow_rot.setIdentity();
+        tf2::Quaternion q;
+        q.setRPY(0,0,yaw);
+        hollow_rot.setRotation(q);
+        // new hollow pose
+        tf2::Transform base_T_hollow_yaw = base_T_hollow * hollow_rot;
+        // recompute TCP
+        tf2::Transform base_T_tcp_yaw = base_T_hollow_yaw * hollow_T_tcp;
         geometry_msgs::msg::PoseStamped pose;
         pose.header.frame_id = "base_link";
-        tf2::toMsg(T, pose.pose);
-
+        tf2::toMsg(base_T_tcp_yaw, pose.pose);
+        publishDebugTF(base_T_hollow_yaw,
+            "T_target_hollow_yaw_"+std::to_string(i));
         // GeneratePose
-        auto gen = std::make_unique<stages::GeneratePose>("gen_pose_yaw_" + std::to_string(i));
+        auto gen = std::make_unique<stages::GeneratePose>(
+            "gen_pose_yaw_" + std::to_string(i));
         gen->setPose(pose);
         gen->setMonitoredStage(current_state_ptr);
-
         // ComputeIK
-        auto ik = std::make_unique<stages::ComputeIK>("compute_ik_yaw_" + std::to_string(i), std::move(gen));
+        auto ik = std::make_unique<stages::ComputeIK>(
+            "compute_ik_yaw_" + std::to_string(i),
+            std::move(gen));
         ik->setIKFrame(hand_frame_);
-        ik->properties().configureInitFrom(Stage::PARENT, {"group", "ik_frame"});
+        ik->properties().configureInitFrom(Stage::PARENT, {"group","ik_frame"});
         ik->properties().configureInitFrom(Stage::INTERFACE, {"target_pose"});
         ik->setMaxIKSolutions(8);
         ik->setMinSolutionDistance(1.0);
-
+        
         alt->insert(std::move(ik));
       }
       place->insert(std::move(alt));
@@ -357,7 +362,7 @@ moveit::task_constructor::Task MTCTaskNode::createTask()
       dir.vector.z = insert_dir.z();
 
       insert->setDirection(dir);
-      insert->setMinMaxDistance(insert_offset_- 0.02,insert_offset_); // 插入深度
+      insert->setMinMaxDistance(insert_offset_- 0.03,insert_offset_); // 插入深度
       place->insert(std::move(insert));
     }
     // 3.5 允许碰撞
