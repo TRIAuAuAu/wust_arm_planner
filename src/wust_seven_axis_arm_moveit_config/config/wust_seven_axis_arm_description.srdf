@@ -24,4 +24,8 @@
     <disable_collisions link1="LINK6" link2="LINK7" reason="Adjacent"/>
     <disable_collisions link1="LINK6" link2="LINK_TCP" reason="Never"/>
     <disable_collisions link1="LINK7" link2="LINK_TCP" reason="Adjacent"/>
+    <!-- 对LINK5特殊处理一下 -->
+    <disable_collisions link1="LINK5" link2="LINK7" reason="Never"/>
+    <disable_collisions link1="LINK5" link2="LINK_TCP" reason="Never"/>
+
 </robot>

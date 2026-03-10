@@ -285,37 +285,50 @@ moveit::task_constructor::Task MTCTaskNode::createTask()
     task.properties().exposeTo(place->properties(), {"group", "ik_frame"});
     // 3.1 生成预放置姿态
     {
-      auto gen = std::make_unique<stages::GeneratePose>("generate_target_pose");
-      tf2::Transform base_T_tcp;
-      tf2::Transform base_T_hollow;
+      auto alt = std::make_unique<Alternatives>("ik_yaw_alternative");
+      place->properties().exposeTo(alt->properties(), {"group", "ik_frame"});
+      tf2::Transform base_T_tcp, base_T_hollow;
+      if(!computeTargetTCP(base_T_tcp, base_T_hollow))
+          throw std::runtime_error("target pose compute failed");
 
-      if(!computeTargetTCP(base_T_tcp,base_T_hollow))
-      {
-        throw std::runtime_error("target pose compute failed");
-      }
-
-      // Debug：发布调试 TF
       publishDebugTF(base_T_hollow,"T_target_hollow");
       publishDebugTF(base_T_tcp,"T_target_tcp");
 
-      geometry_msgs::msg::PoseStamped TCP_target_pose;
-      TCP_target_pose.header.frame_id = "base_link";
-      geometry_msgs::msg::Pose pose;
-      tf2::toMsg(base_T_tcp, pose);
-      TCP_target_pose.pose = pose;
-      gen->setPose(TCP_target_pose);
-      gen->setMonitoredStage(current_state_ptr);
+      // yaw sampling 参数
+      int n_yaw = 5;                  // 备选yaw 个数
+      double yaw_range = M_PI / 6;    // 备选yaw 范围
 
+      for(int i = 0; i < n_yaw; ++i)
+      {
+        double yaw = -yaw_range + i * (2 * yaw_range) / (n_yaw - 1);
 
-      // 计算 IK：控LINK_TCP让手里的 hollow_cylinder 去对准这个 target_pose
-      auto ik =std::make_unique<stages::ComputeIK>("compute_place_ik",std::move(gen));
-      ik->setIKFrame(hand_frame_);
-      ik->properties().configureInitFrom(Stage::PARENT, {"group", "ik_frame"});
-      ik->properties().configureInitFrom(Stage::INTERFACE, {"target_pose"});
-      ik->setMaxIKSolutions(8);
-      ik->setMinSolutionDistance(1.0);
-      // ik->setProperty("ignore_collisions", true); // debug
-      place->insert(std::move(ik));
+        // 生成新的 TCP pose
+        tf2::Transform T = base_T_tcp;
+        tf2::Quaternion q = T.getRotation();
+        tf2::Quaternion q_yaw;
+        q_yaw.setRPY(0,0,yaw); // 绕Z轴旋转
+        T.setRotation(q_yaw * q);
+
+        geometry_msgs::msg::PoseStamped pose;
+        pose.header.frame_id = "base_link";
+        tf2::toMsg(T, pose.pose);
+
+        // GeneratePose
+        auto gen = std::make_unique<stages::GeneratePose>("gen_pose_yaw_" + std::to_string(i));
+        gen->setPose(pose);
+        gen->setMonitoredStage(current_state_ptr);
+
+        // ComputeIK
+        auto ik = std::make_unique<stages::ComputeIK>("compute_ik_yaw_" + std::to_string(i), std::move(gen));
+        ik->setIKFrame(hand_frame_);
+        ik->properties().configureInitFrom(Stage::PARENT, {"group", "ik_frame"});
+        ik->properties().configureInitFrom(Stage::INTERFACE, {"target_pose"});
+        ik->setMaxIKSolutions(8);
+        ik->setMinSolutionDistance(1.0);
+
+        alt->insert(std::move(ik));
+      }
+      place->insert(std::move(alt));
     }
 
     // 3.2 插入时允许碰撞
@@ -331,30 +344,37 @@ moveit::task_constructor::Task MTCTaskNode::createTask()
       auto insert = std::make_unique<stages::MoveRelative>("linear_insert", cartesian);
       insert->properties().configureInitFrom(Stage::PARENT, {"group"});
       insert->setIKFrame("hollow_cylinder");
-      
-      // 关键：在对齐之后，hollow_cylinder 的 Z 轴正向现在正对着插槽深处
+      // 根据latest_slot_pose_计算插入方向：沿着插槽的负Z轴方向插入
+      tf2::Quaternion q;
+      tf2::fromMsg(latest_slot_pose_.pose.orientation, q);
+      tf2::Matrix3x3 R(q);
+      tf2::Vector3 z_axis = R.getColumn(2);
+      tf2::Vector3 insert_dir = -z_axis.normalized();
       geometry_msgs::msg::Vector3Stamped dir;
-      dir.header.frame_id = "hollow_cylinder";
-      dir.vector.z = 1.0; 
+      dir.header.frame_id = "base_link";
+      dir.vector.x = insert_dir.x();
+      dir.vector.y = insert_dir.y();
+      dir.vector.z = insert_dir.z();
 
       insert->setDirection(dir);
-      insert->setMinMaxDistance(insert_offset_,insert_offset_ + 0.01); // 插入深度
+      insert->setMinMaxDistance(insert_offset_- 0.02,insert_offset_); // 插入深度
       place->insert(std::move(insert));
     }
-
+    // 3.5 允许碰撞
+    {
+      auto collision = std::make_unique<stages::ModifyPlanningScene>("allow_collision_after_place");
+      std::vector<std::string> gripper_links = {"LINK7", hand_frame_};
+      collision->allowCollisions("hollow_cylinder", gripper_links, true);
+      place->insert(std::move(collision));
+    }
     // 3.4 分离物体
     {
       auto detach = std::make_unique<stages::ModifyPlanningScene>("detach_object");
       detach->detachObject("hollow_cylinder", hand_frame_);
       place->insert(std::move(detach));
     }
-    // 3.5 禁止碰撞
-    {
-      auto forbid_collision = std::make_unique<stages::ModifyPlanningScene>("forbid_collision_after_place");
-      std::vector<std::string> gripper_links = {"LINK7", hand_frame_};
-      forbid_collision->allowCollisions("hollow_cylinder", gripper_links, false);
-      place->insert(std::move(forbid_collision));
-    }
+
+
     task.add(std::move(place));
   }
   return task;

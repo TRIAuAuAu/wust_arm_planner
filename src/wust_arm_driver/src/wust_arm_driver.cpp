@@ -17,7 +17,7 @@ WustArmDriver::WustArmDriver(const rclcpp::NodeOptions & options)
   last_sim_update_time_ = this->now(); // 初始化时间戳
 
     if (use_fake_hardware_) {
-      RCLCPP_WARN(get_logger(), "!!! RUNNING IN FAKE MODE !!!");
+      RCLCPP_WARN(get_logger(), "RUNNING IN FAKE MODE");
       // 根据参数计算频率
       int interval_ms = static_cast<int>(1000.0 / state_publish_rate_);
       joint_state_timer_ = this->create_wall_timer(

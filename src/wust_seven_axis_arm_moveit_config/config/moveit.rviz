@@ -5,8 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /MotionPlanning1
-        - /TF1
-        - /TF1/Status1
+        - /MotionPlanning1/Scene Robot1
         - /TF1/Frames1
       Splitter Ratio: 0.5
     Tree Height: 340
@@ -229,56 +228,19 @@ Visualization Manager:
       Value: true
       Velocity_Scaling_Factor: 0.1
     - Class: rviz_default_plugins/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 15
       Frames:
         All Enabled: false
-        LINK1:
-          Value: false
-        LINK2:
-          Value: false
-        LINK3:
-          Value: false
-        LINK4:
-          Value: false
-        LINK5:
-          Value: false
-        LINK6:
-          Value: false
-        LINK7:
-          Value: true
-        LINK_TCP:
-          Value: true
-        base_link:
-          Value: false
-        camera_link:
-          Value: false
-        camera_optical_frame:
-          Value: false
-        world:
-          Value: true
       Marker Scale: 0.800000011920929
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: false
       Tree:
-        world:
-          base_link:
-            LINK1:
-              LINK2:
-                LINK3:
-                  LINK4:
-                    LINK5:
-                      LINK6:
-                        LINK7:
-                          LINK_TCP:
-                            {}
-                          camera_link:
-                            camera_optical_frame:
-                              {}
+        {}
       Update Interval: 0
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -297,7 +259,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2
+      Distance: 1.548799991607666
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
