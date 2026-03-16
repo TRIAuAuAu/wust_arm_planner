@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: wust_arm_description
+    relative_path: urdf/wust_arm.urdf
+  srdf:
+    relative_path: config/wust_arm_description.srdf
+  package_settings:
+    author_name: auauau
+    author_email: auauau@gemail.com
+    generated_timestamp: 1773332914
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity

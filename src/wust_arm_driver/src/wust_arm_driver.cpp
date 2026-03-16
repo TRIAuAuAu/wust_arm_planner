@@ -12,9 +12,15 @@ WustArmDriver::WustArmDriver(const rclcpp::NodeOptions & options)
   getParams();
   
   joint_names_ = {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
-  fake_joint_positions_.assign(7, 0.0);
+  joint_positions_.assign(7, 0.0);
   sim_target_positions_.assign(7, 0.0);
   last_sim_update_time_ = this->now(); // 初始化时间戳
+  joint_state_pub_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
+  action_server_ = rclcpp_action::create_server<FollowJointTrajectory>(
+  this, "main_controller/follow_joint_trajectory",
+  std::bind(&WustArmDriver::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
+  std::bind(&WustArmDriver::handle_cancel, this, std::placeholders::_1),
+  std::bind(&WustArmDriver::handle_accepted, this, std::placeholders::_1));
 
     if (use_fake_hardware_) {
       RCLCPP_WARN(get_logger(), "RUNNING IN FAKE MODE");
@@ -33,15 +39,6 @@ WustArmDriver::WustArmDriver(const rclcpp::NodeOptions & options)
       throw;
     }
   }
-
-  // 3. 创建 ROS 接口
-  joint_state_pub_ = this->create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
-
-  action_server_ = rclcpp_action::create_server<FollowJointTrajectory>(
-    this, "main_controller/follow_joint_trajectory",
-    std::bind(&WustArmDriver::handle_goal, this, std::placeholders::_1, std::placeholders::_2),
-    std::bind(&WustArmDriver::handle_cancel, this, std::placeholders::_1),
-    std::bind(&WustArmDriver::handle_accepted, this, std::placeholders::_1));
 }
 
 WustArmDriver::~WustArmDriver()
@@ -66,21 +63,20 @@ void WustArmDriver::publishFakeJointStates()
   double dt = (now - last_sim_update_time_).seconds();
   last_sim_update_time_ = now;
 
-  // 安全检查：防止 dt 异常（比如初次运行或系统时间跳变）
   if (dt <= 0.0 || dt > 0.5) {
-    dt = 0.02; // 强制设为一个合理的步长 (50Hz)
+    dt = 0.02;
   }
 
   // 1. 线性平滑插值 (一阶低通滤波模拟)
   // 这里的 0.1 可以改为从参数读取的 sim_smooth_factor
   // 这种方式不会因为 error 过大产生震荡，运动更丝滑
   for (size_t i = 0; i < 7; ++i) {
-    double diff = sim_target_positions_[i] - fake_joint_positions_[i];
+    double diff = sim_target_positions_[i] - joint_positions_[i];
     if (std::abs(diff) < 0.0001) {
-      fake_joint_positions_[i] = sim_target_positions_[i];
+      joint_positions_[i] = sim_target_positions_[i];
     } else {
       // 这里的 10.0 是增益系数，值越大，仿真追随速度越快
-      fake_joint_positions_[i] += diff * (10.0 * dt); 
+      joint_positions_[i] += diff * (10.0 * dt); 
     }
   }
 
@@ -88,7 +84,7 @@ void WustArmDriver::publishFakeJointStates()
   sensor_msgs::msg::JointState msg;
   msg.header.stamp = now;
   msg.name = joint_names_;
-  msg.position = fake_joint_positions_;
+  msg.position = joint_positions_;
   joint_state_pub_->publish(msg);
 }
 
@@ -102,8 +98,9 @@ void WustArmDriver::getParams()
   this->declare_parameter<double>("state_publish_rate", 50.0);
   this->declare_parameter<double>("goal_tolerance", 0.01);
   this->declare_parameter<double>("goal_timeout", 8.0);
-  this->declare_parameter<int>("controller_freq", 50);
+  this->declare_parameter<int>("controller_freq", 1000);
   this->declare_parameter<bool>("debug", true);
+  this->declare_parameter<bool>("debug_single_point", false);
 
   // 获取参数值并赋值给成员变量
   use_fake_hardware_    = this->get_parameter("use_fake_hardware").as_bool();
@@ -114,7 +111,8 @@ void WustArmDriver::getParams()
   goal_tolerance_       = this->get_parameter("goal_tolerance").as_double();
   goal_timeout_         = this->get_parameter("goal_timeout").as_double();
   controller_freq_      = this->get_parameter("controller_freq").as_int();
-  debug_                =     this->get_parameter("debug").as_bool();
+  debug_                = this->get_parameter("debug").as_bool();
+  debug_single_point_   = this->get_parameter("debug_single_point").as_bool();
 
   // 打印确认
   // RCLCPP_INFO(this->get_logger(), "Mode: %s, Freq: %d, Tolerance: %.3f", 
@@ -153,8 +151,29 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
   auto result = std::make_shared<FollowJointTrajectory::Result>();
   auto feedback = std::make_shared<FollowJointTrajectory::Feedback>();
 
+  // 调试输出：打印接收到的路径点和对应的角度（单位：度）
+  if(debug_)
+  {
+    RCLCPP_WARN(this->get_logger(), "======== 收到新路径，开始打印角度 (Degrees) ========");
+    for (size_t i = 0; i < goal->trajectory.points.size(); ++i) {
+      const auto & point = goal->trajectory.points[i];
+      
+      // 7 个关节
+      std::string angles_str = "";
+      for (double rad : point.positions) {
+        double deg = rad * 180.0 / M_PI;
+        angles_str += std::to_string(deg) + ", ";
+      }
+      RCLCPP_INFO(this->get_logger(), "点 [%zu]: %s", i, angles_str.c_str());
+    }
+    RCLCPP_WARN(this->get_logger(), "==================================================");
+  }
   int sleep_ms = 1000 / controller_freq_;
 
+  size_t start_index = 0;
+  if (debug_single_point_) {
+    start_index = goal->trajectory.points.size() - 1;
+  }
   for (size_t i = 0; i < goal->trajectory.points.size(); ++i) {
     if (goal_handle->is_canceling()) {
       goal_handle->canceled(result);
@@ -164,7 +183,7 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
     const auto & point = goal->trajectory.points[i];
     
     if (use_fake_hardware_) {
-      // 仿真模式：只更新“下位机目标”，不改 fake_joint_positions_
+      // 仿真模式：只更新“下位机目标”，不改 joint_positions_
       sim_target_positions_ = point.positions;
     } else {
       // 真实模式：发送串口包
@@ -177,7 +196,7 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
     }
 
     // 反馈当前真实的物理位置（来自传感器或仿真插值）
-    feedback->actual.positions = fake_joint_positions_;
+    feedback->actual.positions = joint_positions_;
     feedback->header.stamp = this->now();
     goal_handle->publish_feedback(feedback);
 
@@ -199,7 +218,7 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
       return;
     }
 
-    // 这里 check_goal_reached 会检查物理反馈 fake_joint_positions_
+    // 这里 check_goal_reached 会检查物理反馈 joint_positions_
     if (check_goal_reached(final_target)) {
       break; 
     }
@@ -216,7 +235,7 @@ void WustArmDriver::execute(const std::shared_ptr<GoalHandleFollowJointTrajector
 bool WustArmDriver::check_goal_reached(const std::vector<double> & target_positions)
 {
   for (size_t i = 0; i < 7; ++i) {
-    if (std::abs(fake_joint_positions_[i] - target_positions[i]) > goal_tolerance_) {
+    if (std::abs(joint_positions_[i] - target_positions[i]) > goal_tolerance_) {
       return false;
     }
   }
@@ -246,6 +265,14 @@ void WustArmDriver::receiveData()
           msg.header.stamp = this->now();
           msg.name = joint_names_;
           for (int i = 0; i < 7; ++i) {
+            double pos = packet.current_joint_positions[i];
+            joint_positions_[i] = pos; 
+            RCLCPP_DEBUG(this->get_logger(),
+                        "Receive Joint %d: %.3f rad (%.2f deg)",
+                        i+1,
+                        pos,
+                        pos * 180.0 / M_PI);
+                        
             msg.position.push_back(packet.current_joint_positions[i]);
           }
           joint_state_pub_->publish(msg);
@@ -253,7 +280,7 @@ void WustArmDriver::receiveData()
       }
     } catch (const std::exception & ex) {
       RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 20, "Receive error: %s", ex.what());
-      // 避免死循环占用 CPU
+      // 避免死循环
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }

@@ -1,5 +1,6 @@
 #include "detector/detector_node.hpp"
 #include <cv_bridge/cv_bridge.h>
+#include <rclcpp/time.hpp>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2/utils.h>
@@ -111,6 +112,7 @@ void ExchangeSlotDetectorNode::imageCallback(
     // 1. 构造相机坐标系下的位姿
     geometry_msgs::msg::PoseStamped pose_in_camera;
     pose_in_camera.header = img_msg->header;
+    pose_in_camera.header.stamp = rclcpp::Time(0);
     pose_in_camera.pose.position.x = pose_data.tvec[0];
     pose_in_camera.pose.position.y = pose_data.tvec[1];
     pose_in_camera.pose.position.z = pose_data.tvec[2];

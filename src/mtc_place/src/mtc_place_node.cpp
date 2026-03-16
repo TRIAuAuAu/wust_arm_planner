@@ -261,8 +261,8 @@ moveit::task_constructor::Task MTCTaskNode::createTask()
 
   auto pipeline = std::make_shared<solvers::PipelinePlanner>(node_);
   auto cartesian = std::make_shared<solvers::CartesianPath>();
-  cartesian->setStepSize(0.003);
-
+  // 笛卡尔路径每 3mm 一个 waypoint
+  cartesian->setStepSize(0.003); 
   // 1. 获取当前状态
   Stage* current_state_ptr = nullptr;
   {

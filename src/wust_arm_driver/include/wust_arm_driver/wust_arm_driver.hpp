@@ -60,7 +60,7 @@ private:
 
   // 无串口调试 
   bool use_fake_hardware_{false};
-  std::vector<double> fake_joint_positions_;
+  std::vector<double> joint_positions_;
   rclcpp::TimerBase::SharedPtr joint_state_timer_;
   void publishFakeJointStates();
   // 模拟动力学相关(仅在 use_fake_hardware_ 为 true 时使用)
@@ -77,6 +77,7 @@ private:
 
   int controller_freq_;   // 发送频率 (Hz)
   bool debug_;            // 调试模式
+  bool debug_single_point_; // 只发送一个点（最后一个）
 
   double state_publish_rate_; // joint_state发布频率 (Hz)
   std::vector<std::string> joint_names_param_; // 关节名称列表

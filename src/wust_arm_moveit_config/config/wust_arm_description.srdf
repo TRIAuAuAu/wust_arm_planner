@@ -3,7 +3,7 @@
     This is a format for representing semantic information about the robot structure.
     A URDF file must exist for this robot as well, where the joints and the links that are referenced are defined
 -->
-<robot name="wust_seven_axis_arm_description">
+<robot name="wust_arm_description">
     <!--GROUPS: Representation of a set of joints and links. This can be useful for specifying DOF to plan for, defining arms, end effectors, etc-->
     <!--LINKS: When a link is specified, the parent joint of that link (if it exists) is automatically included-->
     <!--JOINTS: When a joint is specified, the child link of that joint (which will always exist) is automatically included-->
@@ -29,5 +29,4 @@
     <!-- 对LINK5特殊处理一下 -->
     <disable_collisions link1="LINK5" link2="LINK7" reason="Never"/>
     <disable_collisions link1="LINK5" link2="LINK_TCP" reason="Never"/>
-
 </robot>

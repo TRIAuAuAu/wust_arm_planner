@@ -81,13 +81,6 @@ def generate_launch_description():
         arguments=["0", "0", "0", "0", "0", "0", "world", "base_link"],
     )
 
-    # ========== MTC ==========
-    # 延迟启动 MTC 节点，确保驱动和 MoveGroup 已就绪
-    delay_mtc_node = TimerAction(
-        period=1.0,
-        actions=[mtc_place_node],
-    )
-
     return LaunchDescription([
         static_tf,
         robot_state_publisher,
@@ -95,5 +88,5 @@ def generate_launch_description():
         wust_arm_driver_node,
         detector_container,
         rviz_node,
-        delay_mtc_node,
+        mtc_place_node
     ])
