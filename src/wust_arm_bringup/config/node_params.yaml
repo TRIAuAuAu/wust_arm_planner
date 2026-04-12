@@ -74,7 +74,7 @@ exchange_slot_detector:
     
     # 任务成功依据 (Action Server 科学判断标准)
     goal_tolerance: 0.01          # [全局] 到达判定容差 (rad)。
-    goal_timeout: 8.0             # [全局] 轨迹执行最长允许时间 (s)。
+    goal_timeout: 1.5             # [全局] 轨迹执行最长允许时间 (s)。
 
     # 仿真控制
     sim_max_speed: 3.14

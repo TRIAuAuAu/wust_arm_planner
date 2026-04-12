@@ -115,7 +115,7 @@ void WustArmDriver::getParams() {
   this->declare_parameter<int>("baud_rate", 115200);
   this->declare_parameter<double>("state_publish_rate", 50.0);
   this->declare_parameter<double>("goal_tolerance", 0.01);
-  this->declare_parameter<double>("goal_timeout", 8.0);
+  this->declare_parameter<double>("goal_timeout", 5.0);
   this->declare_parameter<int>("controller_freq", 100);
   this->declare_parameter<bool>("debug", true);
   this->declare_parameter<bool>("debug_single_point", false);
@@ -298,21 +298,58 @@ void WustArmDriver::execute(
     }
   }
 
-  result->error_code = FollowJointTrajectory::Result::SUCCESSFUL;
-  goal_handle->succeed(result);
+  // ===== 5. 等待最终收敛（核心） =====
+  const auto& final_target = traj.back().positions;
+  bool reached = false;
+  rclcpp::Time wait_start = this->now();
+  while (rclcpp::ok()) {
+
+    if (goal_handle->is_canceling()) {
+      result->error_code = FollowJointTrajectory::Result::INVALID_GOAL;
+      goal_handle->canceled(result);
+      return;
+    }
+
+    if (check_goal_reached(final_target)) {
+      reached = true;
+      break;
+    }
+    double elapsed = (this->now() - wait_start).seconds();
+    if (elapsed > goal_timeout_) {
+      RCLCPP_WARN(this->get_logger(),
+                  "Goal timeout! elapsed=%.3f", elapsed);
+      break;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+  // ===== 6. 返回结果 =====
+  if (reached) {
+    RCLCPP_INFO(this->get_logger(), "Trajectory execution SUCCESS");
+    result->error_code = FollowJointTrajectory::Result::SUCCESSFUL;
+    goal_handle->succeed(result);
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Trajectory execution FAILED");
+    result->error_code =
+        FollowJointTrajectory::Result::GOAL_TOLERANCE_VIOLATED;
+    goal_handle->abort(result);
+  }
 }
 
 // 辅助函数：判断所有关节是否进入容差范围
 bool WustArmDriver::check_goal_reached(
-    const std::vector<double> &target_positions) {
-  for (size_t i = 0; i < 7; ++i) {
+    const std::vector<double>& target_positions)
+{
+  std::lock_guard<std::mutex> lock(sim_mutex_);
+
+  for (size_t i = 0; i < joint_positions_.size(); ++i) {
     if (std::abs(joint_positions_[i] - target_positions[i]) > goal_tolerance_) {
       return false;
     }
   }
   return true;
 }
-
 void WustArmDriver::initMoveIt()
 {
   robot_model_loader::RobotModelLoader loader(this->shared_from_this(), "robot_description");
