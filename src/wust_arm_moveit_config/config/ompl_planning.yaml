@@ -4,6 +4,7 @@ planning_plugin: ompl_interface/OMPLPlanner
 #   default_planner_request_adapters/AddTimeOptimalParameterization
 
 request_adapters: >-
+#  default_planner_request_adapters/AddRuckigTrajectorySmoothing
   default_planner_request_adapters/AddTimeOptimalParameterization
   default_planner_request_adapters/ResolveConstraintFrames
   default_planner_request_adapters/FixWorkspaceBounds

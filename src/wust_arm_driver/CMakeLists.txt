@@ -9,13 +9,29 @@ add_definitions(-Wall -Wextra)
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+find_package(Eigen3 REQUIRED)
+find_package(moveit_core REQUIRED)
+find_package(moveit_ros_planning REQUIRED)
+find_package(moveit_ros_planning_interface REQUIRED)
+
 # 包含 include 目录
-include_directories(include)
+include_directories(include ${EIGEN3_INCLUDE_DIR})
 
 # 构建库
 ament_auto_add_library(${PROJECT_NAME} SHARED
   src/wust_arm_driver.cpp
   src/crc.cpp
+)
+
+ament_target_dependencies(${PROJECT_NAME}
+  rclcpp
+  rclcpp_action
+  sensor_msgs
+  control_msgs
+  Eigen3
+  moveit_core
+  moveit_ros_planning
+  moveit_ros_planning_interface
 )
 
 # 注册组件和生成节点可执行文件

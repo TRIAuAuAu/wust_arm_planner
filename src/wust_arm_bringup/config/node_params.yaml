@@ -57,9 +57,7 @@ exchange_slot_detector:
     use_fake_hardware: true       # [全局] true: 内部仿真模式; false: 串口通讯模式
     debug: true                   # [全局] 开启后会打印轨迹点序号、串口校验等详细日志
     debug_single_point: false
-    # 仿真专用参数 (仅在 use_fake_hardware: true 时生效)
-    sim_max_speed: 1.5            # [仿真] 模拟关节最大旋转速度 (rad/s)
-    
+
     # 实物硬件参数 (仅在 use_fake_hardware: false 时生效)
     # 必须与底层单片机 (如 STM32) 的配置严格一致
     device_name: "/dev/ttyACM0"   # [实物] 串口设备挂载路径
@@ -69,11 +67,17 @@ exchange_slot_detector:
 
     joint_names: ["joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"]
 
-    controller_freq: 1000           # [全局] 发送指令的频率 (Hz)。
+    controller_freq: 100           # [全局] 发送指令的频率 (Hz)。
                                   # 仿真时：目标点更新频率；实物时：串口发包频率
-    state_publish_rate: 50.0      # [全局] 发布 /joint_states 话题的频率 (Hz)
+    state_publish_rate: 100.0     # [全局] 发布 /joint_states 话题的频率 (Hz)
                                   # 建议与 MoveIt 规划频率保持一致 (一般 50-100Hz)
     
     # 任务成功依据 (Action Server 科学判断标准)
     goal_tolerance: 0.01          # [全局] 到达判定容差 (rad)。
     goal_timeout: 8.0             # [全局] 轨迹执行最长允许时间 (s)。
+
+    # 仿真控制
+    sim_max_speed: 3.14
+    sim_control_freq: 1000.0
+    sim_kp: 5.0
+    sim_kv: 0.5

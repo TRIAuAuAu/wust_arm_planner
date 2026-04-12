@@ -5,13 +5,14 @@ planning_plugin: ompl_interface/OMPLPlanner
 
 request_adapters: >-
   default_planner_request_adapters/AddTimeOptimalParameterization
+  default_planner_request_adapters/AddRuckigTrajectorySmoothing
   default_planner_request_adapters/ResolveConstraintFrames
   default_planner_request_adapters/FixWorkspaceBounds
   default_planner_request_adapters/FixStartStateBounds
   default_planner_request_adapters/FixStartStateCollision
   default_planner_request_adapters/FixStartStatePathConstraints
 start_state_max_bounds_error: 0.02 # 初始状态越界允许误差
-start_state_max_dt: 0.1            # 初始状态插值的最大 dt
+start_state_max_dt: 0.5            # 初始状态插值的最大 dt
 jiggle_fraction: 0.05              # 当初始状态不满足约束时随机扰动的比例
 max_sampling_attempts: 200         # OMPL 每个状态采样最大尝试次数
 default_workspace_bounds: 5.0      # xyz 范围

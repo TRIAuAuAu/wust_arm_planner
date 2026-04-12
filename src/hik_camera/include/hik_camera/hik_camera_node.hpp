@@ -3,33 +3,31 @@
 
 #include "MvCameraControl.h"
 #include <camera_info_manager/camera_info_manager.hpp>
+#include <cv_bridge/cv_bridge.h>
 #include <image_transport/image_transport.hpp>
+#include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
-#include <opencv2/opencv.hpp>
-#include <cv_bridge/cv_bridge.h>
 
-namespace hik_camera
-{
-class HikCameraNode : public rclcpp::Node
-{
+namespace hik_camera {
+class HikCameraNode : public rclcpp::Node {
 public:
-  explicit HikCameraNode(const rclcpp::NodeOptions & options);
+  explicit HikCameraNode(const rclcpp::NodeOptions &options);
   ~HikCameraNode() override;
 
 private:
   void declareParameters();
-  rcl_interfaces::msg::SetParametersResult parametersCallback(
-    const std::vector<rclcpp::Parameter> & parameters);
-  
+  rcl_interfaces::msg::SetParametersResult
+  parametersCallback(const std::vector<rclcpp::Parameter> &parameters);
+
   // 核心发布逻辑
   void hikCameraLoop();
   void localFileLoop();
 
   // 海康相机相关
   int nRet = MV_OK;
-  void * camera_handle_ = nullptr;
+  void *camera_handle_ = nullptr;
   MV_IMAGE_BASIC_INFO img_info_;
   MV_CC_PIXEL_CONVERT_PARAM convert_param_;
 

@@ -19,8 +19,8 @@ def generate_launch_description():
         MoveItConfigsBuilder("wust_seven_axis_arm")
         .robot_description(file_path="config/wust_seven_axis_arm_description.urdf.xacro")
         .robot_description_semantic(file_path="config/wust_seven_axis_arm_description.srdf")
-        .robot_description_kinematics(file_path="config/kinematics.yaml")
         .joint_limits(file_path="config/joint_limits.yaml")
+        .robot_description_kinematics(file_path="config/kinematics.yaml")
         .trajectory_execution(file_path="config/moveit_controllers.yaml")
         .planning_pipelines(pipelines=["ompl"])
         .to_moveit_configs()
@@ -71,7 +71,10 @@ def generate_launch_description():
         executable="wust_arm_driver_node",
         name="wust_arm_driver",
         output="both",
-        parameters=[node_params],
+        parameters=[
+            node_params,
+            moveit_config.to_dict(), 
+        ],
     )
 
     # ========== Static TF ==========
